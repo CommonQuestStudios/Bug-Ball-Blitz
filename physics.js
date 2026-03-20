@@ -10,6 +10,7 @@ export class Physics {
         this.groundY = height * 0.7;
         this.friction = 0.95;
         this.bounceDamping = 0.8; // Increased from 0.7 for more bounce
+        this.weatherFriction = 0.9;
     }
     
     updateBall(ball, speedMultiplier = 1.0) {

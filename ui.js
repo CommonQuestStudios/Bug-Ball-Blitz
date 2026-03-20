@@ -761,7 +761,7 @@ export class UIManager {
             const bugCard = document.createElement('div');
             bugCard.className = `bug-card ${isUnlocked ? '' : 'locked'}`;
             
-            if (bug.id === this.currentProfile.preferences.selectedBug) {
+            if (this.currentProfile && bug.id === this.currentProfile.preferences.selectedBug) {
                 bugCard.classList.add('selected');
             }
             
@@ -848,7 +848,7 @@ export class UIManager {
         
         // Draw large question mark
         ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.font = 'bold 60px Arial';
+        ctx.font = 'bold 60px Orbitron, Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('?', 125, 50);

@@ -420,23 +420,23 @@ export class AchievementManager {
 
         // Achievement unlocked text
         ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 20px Arial';
+        ctx.font = 'bold 20px Orbitron, Arial';
         ctx.textAlign = 'center';
         ctx.fillText('🏆 ACHIEVEMENT UNLOCKED! 🏆', canvas.width / 2, y + 25);
 
         // Icon
-        ctx.font = '40px Arial';
+        ctx.font = '40px Orbitron, Arial';
         ctx.fillText(achievement.icon, canvas.width / 2 - 120, y + 70);
 
         // Achievement name
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 18px Arial';
+        ctx.font = 'bold 18px Orbitron, Arial';
         ctx.textAlign = 'left';
         ctx.fillText(achievement.name, x + 80, y + 55);
 
         // Description
         ctx.fillStyle = '#cccccc';
-        ctx.font = '14px Arial';
+        ctx.font = '14px Rajdhani, Arial';
         ctx.fillText(achievement.description, x + 80, y + 75);
 
         ctx.restore();

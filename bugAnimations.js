@@ -295,7 +295,7 @@ function drawBackflip(ctx, player, frame) {
     
     // Trail effect
     if (progress > 0.2) {
-        ctx.fillStyle = '#7ed321' || '#7ed321';
+        ctx.fillStyle = '#7ed321';
         ctx.globalAlpha = 0.3;
         ctx.beginPath();
         ctx.arc(player.x, player.y - arcHeight + 20, radius * 0.8, 0, Math.PI * 2);

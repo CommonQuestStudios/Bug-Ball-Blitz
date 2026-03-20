@@ -89,6 +89,7 @@ class Game {
         this.player2AI = null;
         this.player2AI_2 = null; // For 2v1 mode
         this.player3 = null; // Second AI in 2v1
+        this.player3AI = null;
         
         // Game objects
         this.ball = null;
@@ -159,9 +160,16 @@ class Game {
         // Challenge system
         this.challenges = [];
         
+        // Arcade mode
+        this.arcadeIsMultiplayer = false;
+
         // Penalty shootout state
         this.penaltyState = null; // { round, maxRounds, p1Goals, p2Goals, phase, aimAngle, power, keeperDive, shotTaken }
         
+        // Fixed timestep accumulators
+        this._lastLoopTime = null;
+        this._accumulator = 0;
+
         // Animation
         this.animationId = null;
         
@@ -4205,6 +4213,10 @@ class Game {
         if (!ps || this.gameState !== 'penalty') return;
         
         this.updatePenalty();
+        
+        // Re-check after update — penaltyState can be nullified in 'done' phase
+        if (!this.penaltyState || this.gameState !== 'penalty') return;
+        
         this.renderPenalty();
         
         this.animationId = requestAnimationFrame(() => this.penaltyLoop());
@@ -6171,14 +6183,13 @@ class Game {
     applyCustomLayout() {
         const layout = this.getCurrentLayout();
         
-        console.log(`[APPLY] Applying layout for ${this.gameMode || 'unknown'} mode, ${this.getOrientation()} orientation`);
-        console.log(`[APPLY] Layout data:`, JSON.stringify(layout, null, 2));
-        
         // If no custom layout exists, don't do anything
         if (Object.keys(layout).length === 0) {
-            console.log('[APPLY] No custom layout found - using CSS defaults');
             return;
         }
+        
+        console.log(`[APPLY] Applying layout for ${this.gameMode || 'menu'} mode, ${this.getOrientation()} orientation`);
+        console.log(`[APPLY] Layout data:`, JSON.stringify(layout, null, 2));
         
         // Override mobile controls container positioning to match editor environment
         const mobileControls = document.getElementById('mobileControls');

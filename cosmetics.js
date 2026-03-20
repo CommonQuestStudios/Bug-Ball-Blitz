@@ -519,7 +519,7 @@ function drawHat(ctx, cosmetic, x, y, width, height, frame) {
         ctx.shadowOffsetX = 2;
         ctx.shadowOffsetY = 2;
         
-        ctx.font = `${width * 0.8}px Arial`;
+        ctx.font = `${width * 0.8}px Orbitron, Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         
@@ -587,7 +587,7 @@ function drawGlasses(ctx, cosmetic, x, y, width, height) {
         ctx.shadowOffsetX = 2;
         ctx.shadowOffsetY = 2;
         
-        ctx.font = `${width * 0.5}px Arial`;
+        ctx.font = `${width * 0.5}px Orbitron, Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         
@@ -654,7 +654,7 @@ function drawAccessory(ctx, cosmetic, x, y, width, height, frame) {
         ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
         ctx.shadowBlur = 10;
         
-        ctx.font = `${width * 0.7}px Arial`;
+        ctx.font = `${width * 0.7}px Orbitron, Arial`;
         ctx.fillText('🦋', x - width * 0.6, y - wingFlap);
         ctx.save();
         ctx.scale(-1, 1);
@@ -667,7 +667,7 @@ function drawAccessory(ctx, cosmetic, x, y, width, height, frame) {
         ctx.shadowOffsetX = 2;
         ctx.shadowOffsetY = 2;
         
-        ctx.font = `${width * 0.6}px Arial`;
+        ctx.font = `${width * 0.6}px Orbitron, Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(cosmetic.icon, offsetX, offsetY);

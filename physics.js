@@ -80,12 +80,16 @@ export class Physics {
             postHit = { x: ball.x, y: goalY, side: 'left' };
         }
         
-        // Left goal post (front edge) - vertical barrier at x = goalWidth
+        // Left goal post (front edge) - only block ball above or below goal mouth
         if (ball.x + ball.radius > goalWidth - 4 && ball.x - ball.radius < goalWidth + 4 &&
             ball.y > goalY && ball.y < this.groundY) {
-            ball.x = goalWidth + ball.radius + 4;
-            ball.vx = Math.abs(ball.vx) * 0.7;
-            postHit = { x: goalWidth, y: ball.y, side: 'left' };
+            // Ball is in the goal mouth area - allow it through (this is a goal!)
+            // Only bounce if ball is hitting the actual post frame (near crossbar)
+            if (ball.y < goalY + 10) {
+                ball.x = goalWidth + ball.radius + 4;
+                ball.vx = Math.abs(ball.vx) * 0.7;
+                postHit = { x: goalWidth, y: ball.y, side: 'left' };
+            }
         }
         
         // Right goal top barrier - simple horizontal wall
@@ -102,12 +106,16 @@ export class Physics {
             postHit = { x: ball.x, y: goalY, side: 'right' };
         }
         
-        // Right goal post (front edge) - vertical barrier at x = width - goalWidth
+        // Right goal post (front edge) - only block ball above or below goal mouth
         if (ball.x - ball.radius < this.width - goalWidth + 4 && ball.x + ball.radius > this.width - goalWidth - 4 &&
             ball.y > goalY && ball.y < this.groundY) {
-            ball.x = this.width - goalWidth - ball.radius - 4;
-            ball.vx = -Math.abs(ball.vx) * 0.7;
-            postHit = { x: this.width - goalWidth, y: ball.y, side: 'right' };
+            // Ball is in the goal mouth area - allow it through (this is a goal!)
+            // Only bounce if ball is hitting the actual post frame (near crossbar)
+            if (ball.y < goalY + 10) {
+                ball.x = this.width - goalWidth - ball.radius - 4;
+                ball.vx = -Math.abs(ball.vx) * 0.7;
+                postHit = { x: this.width - goalWidth, y: ball.y, side: 'right' };
+            }
         }
         
         // Ceiling collision
@@ -465,11 +473,11 @@ export class Physics {
         ball.vy = 0;
     }
     
-    resetPlayer(player, side) {
+    resetPlayer(player, side, offset = 0) {
         if (side === 'left') {
-            player.x = this.width * 0.25;
+            player.x = this.width * (0.25 + offset);
         } else {
-            player.x = this.width * 0.75;
+            player.x = this.width * (0.75 + offset);
         }
         player.y = this.groundY - player.height / 2;
         player.vx = 0;

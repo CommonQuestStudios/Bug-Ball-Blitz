@@ -3285,7 +3285,7 @@ class Game {
             this.physics.resetPlayer(this.player2, 'right');
             
             if (this.player3) {
-                this.physics.resetPlayer(this.player3, 'right');
+                this.physics.resetPlayer(this.player3, 'right', -0.1);
             }
         }, 1000);
         
@@ -4232,10 +4232,10 @@ class Game {
             if (ps.aimAngle < -1) { ps.aimAngle = -1; ps.aimDir = 1; }
             
             // Tap/click/space to lock aim → move to power
-            if (this.keys[' '] || this.keys['ArrowUp'] || this._penaltyTap) {
+            if (this.keys[' '] || this.keys['arrowup'] || this._penaltyTap) {
                 this._penaltyTap = false;
                 this.keys[' '] = false;
-                this.keys['ArrowUp'] = false;
+                this.keys['arrowup'] = false;
                 ps.phase = 'power';
                 ps.power = 0;
                 ps.powerDir = 1;
@@ -4246,10 +4246,10 @@ class Game {
             if (ps.power > 1) { ps.power = 1; ps.powerDir = -1; }
             if (ps.power < 0) { ps.power = 0; ps.powerDir = 1; }
             
-            if (this.keys[' '] || this.keys['ArrowUp'] || this._penaltyTap) {
+            if (this.keys[' '] || this.keys['arrowup'] || this._penaltyTap) {
                 this._penaltyTap = false;
                 this.keys[' '] = false;
-                this.keys['ArrowUp'] = false;
+                this.keys['arrowup'] = false;
                 this.shootPenalty();
             }
         } else if (ps.phase === 'shooting') {

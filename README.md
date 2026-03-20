@@ -365,7 +365,7 @@ Potential additions:
 
 ## 📜 Version History
 
-Current Version: **v1.23.0**
+Current Version: **v1.24.0**
 
 See [CHANGELOG_v1.9.0.md](CHANGELOG_v1.9.0.md) for detailed version history.
 

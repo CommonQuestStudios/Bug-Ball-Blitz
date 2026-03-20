@@ -28,6 +28,9 @@ export class Physics {
         const goalHeight = 120;
         const goalY = this.groundY - goalHeight;
         
+        // Track crossbar/post hits for feedback
+        let postHit = null;
+        
         // CRITICAL: Prevent ball from going underground (fixes player collision bug)
         // This happens when ball gets caught between two players
         if (ball.y + ball.radius > this.groundY) {
@@ -73,6 +76,15 @@ export class Physics {
             }
             // Push ball off crossbar towards center (to the right, away from left edge)
             ball.vx += 1.5;
+            postHit = { x: ball.x, y: goalY, side: 'left' };
+        }
+        
+        // Left goal post (front edge) - vertical barrier at x = goalWidth
+        if (ball.x + ball.radius > goalWidth - 4 && ball.x - ball.radius < goalWidth + 4 &&
+            ball.y > goalY && ball.y < this.groundY) {
+            ball.x = goalWidth + ball.radius + 4;
+            ball.vx = Math.abs(ball.vx) * 0.7;
+            postHit = { x: goalWidth, y: ball.y, side: 'left' };
         }
         
         // Right goal top barrier - simple horizontal wall
@@ -86,6 +98,15 @@ export class Physics {
             }
             // Push ball off crossbar towards center (to the left, away from right edge)
             ball.vx -= 1.5;
+            postHit = { x: ball.x, y: goalY, side: 'right' };
+        }
+        
+        // Right goal post (front edge) - vertical barrier at x = width - goalWidth
+        if (ball.x - ball.radius < this.width - goalWidth + 4 && ball.x + ball.radius > this.width - goalWidth - 4 &&
+            ball.y > goalY && ball.y < this.groundY) {
+            ball.x = this.width - goalWidth - ball.radius - 4;
+            ball.vx = -Math.abs(ball.vx) * 0.7;
+            postHit = { x: this.width - goalWidth, y: ball.y, side: 'right' };
         }
         
         // Ceiling collision
@@ -93,6 +114,8 @@ export class Physics {
             ball.y = ball.radius;
             ball.vy *= -0.5;
         }
+        
+        return postHit;
     }
     
     updatePlayer(player, bug, jumpPowerMultiplier = 1.0) {
@@ -420,6 +443,18 @@ export class Physics {
         }
         
         return null;
+    }
+    
+    applyWeather(ball, weather, windDirection) {
+        if (!weather || weather === 'none') return;
+        if (weather === 'rain') {
+            ball.vx *= 0.92;
+        } else if (weather === 'snow') {
+            ball.vx *= 0.88;
+        }
+        if (windDirection) {
+            ball.vx += windDirection * 0.15;
+        }
     }
     
     resetBall(ball) {

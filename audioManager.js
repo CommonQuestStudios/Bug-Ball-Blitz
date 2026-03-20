@@ -60,7 +60,8 @@ export class AudioManager {
             celebration: this.createCelebrationSound(),
             crowd_cheer: this.createCrowdCheerSound(),
             crowd_boo: this.createCrowdBooSound(),
-            crowd_ooh: this.createCrowdOohSound()
+            crowd_ooh: this.createCrowdOohSound(),
+            crossbar_hit: this.createCrossbarHitSound()
         };
     }
     
@@ -280,6 +281,42 @@ export class AudioManager {
             
             oscillator.start(this.audioContext.currentTime);
             oscillator.stop(this.audioContext.currentTime + 0.7);
+        };
+    }
+    
+    createCrossbarHitSound() {
+        return () => {
+            if (!this.soundEnabled) return;
+            
+            // Metallic ring for post/crossbar hit
+            const osc = this.audioContext.createOscillator();
+            const osc2 = this.audioContext.createOscillator();
+            const gain = this.audioContext.createGain();
+            const gain2 = this.audioContext.createGain();
+            
+            osc.connect(gain);
+            osc2.connect(gain2);
+            gain.connect(this.audioContext.destination);
+            gain2.connect(this.audioContext.destination);
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(1200, this.audioContext.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(800, this.audioContext.currentTime + 0.3);
+            
+            osc2.type = 'triangle';
+            osc2.frequency.setValueAtTime(2400, this.audioContext.currentTime);
+            osc2.frequency.exponentialRampToValueAtTime(1600, this.audioContext.currentTime + 0.2);
+            
+            gain.gain.setValueAtTime(0.4 * this.soundVolume, this.audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.35);
+            
+            gain2.gain.setValueAtTime(0.2 * this.soundVolume, this.audioContext.currentTime);
+            gain2.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.25);
+            
+            osc.start(this.audioContext.currentTime);
+            osc.stop(this.audioContext.currentTime + 0.35);
+            osc2.start(this.audioContext.currentTime);
+            osc2.stop(this.audioContext.currentTime + 0.25);
         };
     }
     

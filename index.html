@@ -6,9 +6,12 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-        <meta name="theme-color" content="#1a0033">
-            <title>Bug Ball Blitz v1.23.0</title>
+        <meta name="theme-color" content="#0a0a1a">
+            <title>Bug Ball Blitz v1.24.0</title>
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <!-- AdsManager module (placeholder on web; real AdMob via native wrapper) -->
     <script type="module" src="./ads.js"></script>
@@ -28,7 +31,7 @@
 </head>
 <body>
     <!-- Version number - always visible -->
-    <div class="version">v1.23.0</div>    
+    <div class="version">v1.24.0</div>    
     <div id="gameContainer">
         <!-- Title Screen -->
         <div id="titleScreen" class="screen active">
@@ -109,11 +112,13 @@
             <div class="menu-content">
                 <h2 data-text="Main Menu">Main Menu</h2>
                 <div id="profileInfo" class="profile-info"></div>
+                <div id="challengeDisplay" class="challenge-display"></div>
                 <div class="menu-buttons">
                     <button class="menu-btn" id="towerCampaignBtn">🏆 Tower Campaign</button>
                     <button class="menu-btn" id="quickPlayBtn">⚡ Quick Play</button>
                     <button class="menu-btn" id="localMultiplayerBtn">🎮 Local Multiplayer</button>
                     <button class="menu-btn" id="arcadeModeBtn">🎯 Arcade Mode</button>
+                    <button class="menu-btn" id="penaltyShootoutBtn">🥅 Penalty Shootout</button>
                     <button class="menu-btn" id="tutorialBtn">📖 How to Play</button>
                     <button class="menu-btn" id="stylesBtn">✨ Styles</button>
                     <button class="menu-btn" id="achievementsBtn">🏅 Achievements</button>
@@ -593,6 +598,45 @@
             </div>
         </div>
 
+        <!-- Match Mode Selection -->
+        <div id="matchModeScreen" class="screen">
+            <h2 data-text="Match Mode">Match Mode</h2>
+            <p class="difficulty-subtitle">Choose a special rule or play normal</p>
+            <div class="difficulty-grid">
+                <div class="difficulty-card">
+                    <button class="menu-btn match-mode-btn" data-mode="normal">
+                        <span class="diff-icon">⚽</span>
+                        <span class="diff-name">Normal</span>
+                    </button>
+                    <p class="diff-description">Standard rules, most goals wins</p>
+                </div>
+                <div class="difficulty-card">
+                    <button class="menu-btn match-mode-btn" data-mode="sudden_death">
+                        <span class="diff-icon">💀</span>
+                        <span class="diff-name">Sudden Death</span>
+                    </button>
+                    <p class="diff-description">First goal wins the match!</p>
+                </div>
+                <div class="difficulty-card">
+                    <button class="menu-btn match-mode-btn" data-mode="golden_goal">
+                        <span class="diff-icon">🥇</span>
+                        <span class="diff-name">Golden Goal</span>
+                    </button>
+                    <p class="diff-description">If tied, next goal wins instantly</p>
+                </div>
+                <div class="difficulty-card">
+                    <button class="menu-btn match-mode-btn" data-mode="first_to_3">
+                        <span class="diff-icon">🎯</span>
+                        <span class="diff-name">First to 3</span>
+                    </button>
+                    <p class="diff-description">No timer — first to 3 goals wins</p>
+                </div>
+            </div>
+            <div class="menu-buttons">
+                <button class="menu-btn" id="cancelMatchModeBtn">← Back</button>
+            </div>
+        </div>
+
         <!-- Loading Screen -->
         <div id="loadingScreen" class="screen" style="display: none;">
             <div class="loading-content">
@@ -794,6 +838,7 @@
             <div class="menu-panel pause-panel">
                 <h2 data-text="⏸️ Paused">⏸️ Paused</h2>
                 <div class="pause-info">
+                    <div id="pauseModeInfo" class="pause-mode-info"></div>
                     <div class="pause-score">
                         <span id="pauseScore1" class="score-display">0</span>
                         <span class="score-separator">-</span>

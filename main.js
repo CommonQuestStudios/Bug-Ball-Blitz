@@ -43,6 +43,7 @@ class Game {
         
         // Game state
         this.gameMode = null; // 'tower', 'quickplay', 'multiplayer'
+        this.matchMode = 'normal'; // 'normal', 'sudden_death', 'golden_goal', 'first_to_3'
         this.gameState = 'menu'; // 'menu', 'countdown', 'playing', 'paused', 'ended'
         this.pausedFromState = null; // Track which state we paused from
         this.difficulty = 'medium';
@@ -53,6 +54,12 @@ class Game {
         this.bossGauntletBugs = []; // Array of bugs to face
         this.bossGauntletCurrentIndex = 0; // Current bug index
         this.bossGauntletWins = 0; // Wins against bosses
+        
+        // Dynamic difficulty adjustment
+        this.dynamicDifficulty = {
+            streak: 0,       // Positive = consecutive wins, negative = consecutive losses
+            modifier: 0      // -0.2 to +0.2 AI skill modifier
+        };
         
         // Rotation handling
         this.isRotating = false;
@@ -138,6 +145,22 @@ class Game {
         
         // Debug flags
         this.debugDragLogs = false;
+        
+        // Pre-rendered bug sprite cache (SVG → offscreen canvas)
+        this.bugSpriteCache = {};
+        
+        // Instant replay buffer (circular, stores last ~120 frames = ~2 seconds at 60fps)
+        this.replayBuffer = [];
+        this.replayBufferMax = 120;
+        this.replayPlaying = false;
+        this.replayIndex = 0;
+        this.replayFrames = [];
+        
+        // Challenge system
+        this.challenges = [];
+        
+        // Penalty shootout state
+        this.penaltyState = null; // { round, maxRounds, p1Goals, p2Goals, phase, aimAngle, power, keeperDive, shotTaken }
         
         // Animation
         this.animationId = null;
@@ -300,6 +323,30 @@ class Game {
         }
     }
     
+    preRenderBugSprite(bugId, width, height) {
+        const key = `${bugId}_${width}_${height}`;
+        if (this.bugSpriteCache[key]) return this.bugSpriteCache[key];
+        
+        const bug = getBugById(bugId);
+        if (!bug || !bug.svg) return null;
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const img = new Image();
+        const svgBlob = new Blob([bug.svg], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+        img.onload = () => {
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            URL.revokeObjectURL(url);
+            this.bugSpriteCache[key] = canvas;
+        };
+        img.src = url;
+        // Return null on first call (async), cache hit on subsequent calls
+        return null;
+    }
+    
     resizeCanvas() {
         const container = document.getElementById('gameScreen');
         const oldWidth = this.canvas.width;
@@ -427,6 +474,11 @@ class Game {
             this.showArcadeMode();
         });
         
+        document.getElementById('penaltyShootoutBtn').addEventListener('click', () => {
+            this.audio.playSound('ui_click');
+            this.startPenaltyShootout();
+        });
+        
         document.getElementById('arcadeSinglePlayerBtn').addEventListener('click', () => {
             this.audio.playSound('ui_click');
             this.arcadeIsMultiplayer = false;
@@ -507,6 +559,19 @@ class Game {
         document.getElementById('cancelDifficultyBtn').addEventListener('click', () => {
             this.audio.playSound('ui_click');
             this.ui.showScreen('mainMenu');
+        });
+        
+        // Match mode selection
+        document.querySelectorAll('.match-mode-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.audio.playSound('ui_click');
+                this.matchMode = btn.dataset.mode;
+                this.startMatch();
+            });
+        });
+        document.getElementById('cancelMatchModeBtn').addEventListener('click', () => {
+            this.audio.playSound('ui_click');
+            this.ui.showScreen('arenaSelectScreen');
         });
         
         // Settings menu (only accessible from pause menu)
@@ -750,6 +815,11 @@ class Game {
     }
     
     setupMobileControls() {
+        // Clean up previous listeners if re-initialized
+        if (this._mobileAbort) this._mobileAbort.abort();
+        this._mobileAbort = new AbortController();
+        const signal = this._mobileAbort.signal;
+        
         // Always setup touch controls so users can enable them manually on touchscreen laptops
         
         // Player 1 Controls
@@ -864,8 +934,8 @@ class Game {
         this.applyDefaultMobileLayout();
 
         // Re-apply layout on orientation change / resize
-        window.addEventListener('orientationchange', () => this.applyDefaultMobileLayout());
-        window.addEventListener('resize', () => this.applyDefaultMobileLayout());
+        window.addEventListener('orientationchange', () => this.applyDefaultMobileLayout(), { signal });
+        window.addEventListener('resize', () => this.applyDefaultMobileLayout(), { signal });
     }
 
     applyDefaultMobileLayout() {
@@ -1052,6 +1122,7 @@ class Game {
     
     startTowerCampaign() {
     this.setGameMode('tower');
+    this.matchMode = 'normal';
     this.ensureAds();
         // towerLevel is now set by either continuing or selecting a specific level
         if (!this.towerLevel) {
@@ -1286,7 +1357,7 @@ class Game {
             this.selectedBug2 = this.getRandomBug();
             this.ui.showArenaSelection((arenaId) => {
                 this.selectedArena = getArenaById(arenaId);
-                this.startMatch();
+                this.ui.showScreen('matchModeScreen');
             });
         });
     }
@@ -1308,7 +1379,7 @@ class Game {
                 this.selectedBug2 = getBugById(bugId2);
                 this.ui.showArenaSelection((arenaId) => {
                     this.selectedArena = getArenaById(arenaId);
-                    this.startMatch();
+                    this.ui.showScreen('matchModeScreen');
                 });
             }, '🔵 P2 — Select Your Bug', 'p2');
         }, '🔴 P1 — Select Your Bug', 'p1');
@@ -1560,6 +1631,7 @@ class Game {
     
     startArcadeMatch() {
     this.setGameMode('arcade');
+        this.matchMode = 'normal';
         
         // Stop main menu background
         if (this.mainMenuBackground) {
@@ -1862,6 +1934,12 @@ class Game {
                 // Use aggressive personality for boss battles
                 const aiPersonality = this.bossGauntletActive ? 'aggressive' : 'balanced';
                 this.player2AI = new AI(this.difficulty, this.player2, this.ball, this.physics, 'right', aiPersonality, this.bossGauntletActive);
+                // Apply dynamic difficulty modifier
+                if (this.dynamicDifficulty.modifier !== 0) {
+                    this.player2AI.applyDynamicModifier(this.dynamicDifficulty.modifier);
+                }
+                // Give AI a reference to the opponent for velocity prediction
+                this.player2AI.opponent = this.player1;
                 this.player2AI_2 = null; // No multi-AI in 1v1 mode
                 this.player3 = null; // No third player in 1v1 mode
             }
@@ -1877,6 +1955,15 @@ class Game {
             this.matchTimeLimit = this.arcadeSettings.matchTime * 60; // Convert minutes to seconds
             this.scoreToWin = this.arcadeSettings.scoreToWin;
         }
+        
+        // Apply match mode overrides
+        if (this.matchMode === 'sudden_death') {
+            this.scoreToWin = 1;
+        } else if (this.matchMode === 'first_to_3') {
+            this.scoreToWin = 3;
+            this.matchTimeLimit = 9999; // Effectively no time limit
+        }
+        this.goldenGoalActive = false;
         // Otherwise use the settings from arena preview or defaults
         
         // Reset scores and timer for new match
@@ -1930,6 +2017,13 @@ class Game {
             cancelAnimationFrame(this.animationId);
         }
         
+        // Calculate delta time for frame-rate independence
+        const now = performance.now();
+        const rawDt = this._lastLoopTime ? (now - this._lastLoopTime) / 1000 : 1 / 60;
+        this._lastLoopTime = now;
+        // Clamp to prevent spiral of death on tab switch (max 3 frames of catch-up)
+        this._accumulator = (this._accumulator || 0) + Math.min(rawDt, 3 / 60);
+        
         // Increment frame counter for animations
         this.frameCount++;
         
@@ -1949,11 +2043,19 @@ class Game {
             this.updateCountdown();
             this.renderCountdown();
         } else if (this.gameState === 'playing') {
-            this.update();
+            // Fixed-step physics: consume accumulated time in 1/60s increments
+            const fixedStep = 1 / 60;
+            while (this._accumulator >= fixedStep) {
+                this.update();
+                this._accumulator -= fixedStep;
+                if (this.gameState !== 'playing') break; // match may have ended
+            }
             this.render();
         } else if (this.gameState === 'goal_scored') {
-            // Just render the celebration, don't update game logic
-            this.renderCountdown(); // Reuse countdown render which includes celebration
+            // During replay, playGoalReplay handles its own rendering
+            if (!this.replayPlaying) {
+                this.renderCountdown(); // Reuse countdown render which includes celebration
+            }
         } else {
             this.animationId = null;
             return;
@@ -2056,7 +2158,7 @@ class Game {
             }
             
             this.ctx.save();
-            this.ctx.font = 'bold 48px Arial';
+            this.ctx.font = 'bold 48px Orbitron, Arial';
             this.ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
             this.ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.8})`;
             this.ctx.lineWidth = 6;
@@ -2084,7 +2186,7 @@ class Game {
             this.ctx.save();
             
             // VS text in center
-            this.ctx.font = 'bold 60px Arial';
+            this.ctx.font = 'bold 60px Orbitron, Arial';
             this.ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
             this.ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.8})`;
             this.ctx.lineWidth = 6;
@@ -2096,8 +2198,8 @@ class Game {
             this.ctx.fillText('VS', this.canvas.width / 2, centerY);
             
             // Team 1 (left side)
-            this.ctx.font = 'bold 36px Arial';
-            this.ctx.fillStyle = `rgba(126, 211, 33, ${opacity})`;
+            this.ctx.font = 'bold 36px Orbitron, Arial';
+            this.ctx.fillStyle = `rgba(0, 200, 255, ${opacity})`;
             this.ctx.lineWidth = 4;
             this.ctx.textAlign = 'center';
             
@@ -2125,7 +2227,7 @@ class Game {
                 this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
                 this.ctx.scale(scale, scale);
                 
-                this.ctx.font = 'bold 140px Arial';
+                this.ctx.font = 'bold 140px Orbitron, Arial';
                 this.ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
                 this.ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.8})`;
                 this.ctx.lineWidth = 10;
@@ -2148,8 +2250,8 @@ class Game {
             this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
             this.ctx.scale(scale, scale);
             
-            this.ctx.font = 'bold 160px Arial';
-            this.ctx.fillStyle = `rgba(126, 211, 33, ${opacity})`;
+            this.ctx.font = 'bold 160px Orbitron, Arial';
+            this.ctx.fillStyle = `rgba(0, 200, 255, ${opacity})`;
             this.ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.8})`;
             this.ctx.lineWidth = 12;
             this.ctx.textAlign = 'center';
@@ -2238,7 +2340,7 @@ class Game {
         const countdownNum = Math.ceil(this.countdownValue);
         if (countdownNum > 0) {
             this.ctx.save();
-            this.ctx.font = 'bold 120px Arial';
+            this.ctx.font = 'bold 120px Orbitron, Arial';
             this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
             this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
             this.ctx.lineWidth = 8;
@@ -2250,13 +2352,13 @@ class Game {
             this.ctx.fillText(text, this.canvas.width / 2, this.canvas.height / 2);
             
             // Top text - different based on context
-            this.ctx.font = 'bold 40px Arial';
+            this.ctx.font = 'bold 40px Orbitron, Arial';
             this.ctx.lineWidth = 4;
             
             // Check if this is after a goal (3 sec countdown) or match start (5 sec)
             const isAfterGoal = this.score1 > 0 || this.score2 > 0;
             let topText = isAfterGoal ? 'GOAL!' : 'GET READY!';
-            let topColor = isAfterGoal ? 'rgba(255, 215, 0, 0.9)' : 'rgba(126, 211, 33, 0.9)';
+            let topColor = isAfterGoal ? 'rgba(255, 215, 0, 0.9)' : 'rgba(0, 200, 255, 0.9)';
             
             this.ctx.fillStyle = topColor;
             this.ctx.strokeText(topText, this.canvas.width / 2, this.canvas.height / 2 - 100);
@@ -2264,7 +2366,7 @@ class Game {
             
             // Display weather status if active
             if (this.currentWeather && this.currentWeather !== 'none') {
-                this.ctx.font = 'bold 28px Arial';
+                this.ctx.font = 'bold 28px Orbitron, Arial';
                 this.ctx.lineWidth = 3;
                 const weatherIcons = { 'rain': '🌧️ Rain', 'snow': '❄️ Snow', 'wind': '💨 Wind' };
                 const weatherText = weatherIcons[this.currentWeather] || this.currentWeather;
@@ -2313,8 +2415,14 @@ class Game {
             
             // Check if time is up
             if (this.matchTimeElapsed >= this.matchTimeLimit) {
-                this.endMatch();
-                return;
+                // Golden Goal: if tied, keep playing
+                if (this.matchMode === 'golden_goal' && this.score1 === this.score2) {
+                    this.goldenGoalActive = true;
+                    this.matchTimeLimit = this.matchTimeElapsed + 9999; // extend indefinitely
+                } else {
+                    this.endMatch();
+                    return;
+                }
             }
         }
         
@@ -2380,7 +2488,15 @@ class Game {
         
         // Update all balls
         for (let ball of this.balls) {
-            this.physics.updateBall(ball, ballSpeedMultiplier);
+            const postHit = this.physics.updateBall(ball, ballSpeedMultiplier);
+            
+            // Goalpost/crossbar hit feedback
+            if (postHit) {
+                this.audio.playSound('crossbar_hit');
+                this.audio.vibrate([30, 20, 30]);
+                const maxParticles = this.quality.getSetting('particleCount');
+                this.particles.createPostSparks(postHit.x, postHit.y, maxParticles);
+            }
             
             // Update ball rotation based on velocity (rolling effect)
             const rotationSpeed = ball.vx / (2 * Math.PI * ball.radius);
@@ -2461,6 +2577,22 @@ class Game {
                      this.ball.y < goalBottom + nearMissDistance &&
                      Math.abs(this.ball.vx) > 5) {
                 this.lastNearMissTime = now;
+            }
+        }
+        
+        // Record frame for instant replay
+        if (this.ball) {
+            const frame = {
+                ball: { x: this.ball.x, y: this.ball.y, vx: this.ball.vx, vy: this.ball.vy, rotation: this.ball.rotation },
+                p1: { x: this.player1.x, y: this.player1.y, facing: this.player1.facing },
+                p2: { x: this.player2.x, y: this.player2.y, facing: this.player2.facing }
+            };
+            if (this.player3) {
+                frame.p3 = { x: this.player3.x, y: this.player3.y, facing: this.player3.facing };
+            }
+            this.replayBuffer.push(frame);
+            if (this.replayBuffer.length > this.replayBufferMax) {
+                this.replayBuffer.shift();
             }
         }
         
@@ -2550,95 +2682,267 @@ class Game {
         if (this.player3) {
             this.drawPlayer(this.player3, this.selectedBug3);
         }
+        
+        // Golden Goal overlay
+        if (this.goldenGoalActive) {
+            this.ctx.save();
+            this.ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+            this.ctx.font = 'bold 18px Orbitron, Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('⚡ GOLDEN GOAL ⚡', this.canvas.width / 2, 30);
+            this.ctx.restore();
+        }
     }
     
     drawGoals() {
         const goalWidth = 100;
         const goalHeight = 120;
         const groundY = this.physics.groundY;
+        const ctx = this.ctx;
+        const postWidth = 8;
+        const cw = this.canvas.width;
         
-        // Left goal
-        this.ctx.strokeStyle = 'white';
-        this.ctx.lineWidth = 4;
-        this.ctx.beginPath();
-        this.ctx.moveTo(0, groundY);
-        this.ctx.lineTo(0, groundY - goalHeight);
-        this.ctx.lineTo(goalWidth, groundY - goalHeight);
-        this.ctx.stroke();
+        // --- Left Goal ---
+        ctx.save();
         
-        // Right goal
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.canvas.width, groundY);
-        this.ctx.lineTo(this.canvas.width, groundY - goalHeight);
-        this.ctx.lineTo(this.canvas.width - goalWidth, groundY - goalHeight);
-        this.ctx.stroke();
+        // Net background (dark translucent fill)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        ctx.fillRect(0, groundY - goalHeight, goalWidth, goalHeight);
         
-        // Goal nets
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        this.ctx.lineWidth = 1;
-        for (let i = 0; i < goalHeight; i += 10) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, groundY - i);
-            this.ctx.lineTo(goalWidth, groundY - i);
-            this.ctx.stroke();
-            
-            this.ctx.beginPath();
-            this.ctx.moveTo(this.canvas.width, groundY - i);
-            this.ctx.lineTo(this.canvas.width - goalWidth, groundY - i);
-            this.ctx.stroke();
+        // Net mesh
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = 0.8;
+        for (let i = 10; i < goalHeight; i += 12) {
+            ctx.beginPath();
+            ctx.moveTo(0, groundY - i);
+            ctx.lineTo(goalWidth - postWidth, groundY - i);
+            ctx.stroke();
         }
+        for (let j = 10; j < goalWidth - postWidth; j += 12) {
+            ctx.beginPath();
+            ctx.moveTo(j, groundY);
+            ctx.lineTo(j, groundY - goalHeight + postWidth);
+            ctx.stroke();
+        }
+        
+        // Goal post - vertical (left edge)
+        let grad = ctx.createLinearGradient(0, 0, postWidth, 0);
+        grad.addColorStop(0, '#e8e8e8');
+        grad.addColorStop(0.3, '#ffffff');
+        grad.addColorStop(0.7, '#d0d0d0');
+        grad.addColorStop(1, '#a0a0a0');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, groundY - goalHeight, postWidth, goalHeight);
+        
+        // Goal post - crossbar
+        grad = ctx.createLinearGradient(0, groundY - goalHeight, 0, groundY - goalHeight + postWidth);
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.5, '#e0e0e0');
+        grad.addColorStop(1, '#b0b0b0');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, groundY - goalHeight, goalWidth, postWidth);
+        
+        // Post end cap (rounded top)
+        ctx.fillStyle = '#e0e0e0';
+        ctx.beginPath();
+        ctx.arc(postWidth / 2, groundY - goalHeight + postWidth / 2, postWidth / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(goalWidth - postWidth / 2 + postWidth, groundY - goalHeight + postWidth / 2, postWidth / 2 + 1, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Post highlight line
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(2, groundY - goalHeight + postWidth);
+        ctx.lineTo(2, groundY);
+        ctx.stroke();
+        
+        // Subtle glow at crossbar
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.15)';
+        ctx.shadowBlur = 8;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = postWidth + 4;
+        ctx.beginPath();
+        ctx.moveTo(0, groundY - goalHeight + postWidth / 2);
+        ctx.lineTo(goalWidth, groundY - goalHeight + postWidth / 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        
+        ctx.restore();
+        
+        // --- Right Goal ---
+        ctx.save();
+        
+        // Net background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        ctx.fillRect(cw - goalWidth, groundY - goalHeight, goalWidth, goalHeight);
+        
+        // Net mesh
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = 0.8;
+        for (let i = 10; i < goalHeight; i += 12) {
+            ctx.beginPath();
+            ctx.moveTo(cw - goalWidth + postWidth, groundY - i);
+            ctx.lineTo(cw, groundY - i);
+            ctx.stroke();
+        }
+        for (let j = cw - goalWidth + postWidth; j < cw; j += 12) {
+            ctx.beginPath();
+            ctx.moveTo(j, groundY);
+            ctx.lineTo(j, groundY - goalHeight + postWidth);
+            ctx.stroke();
+        }
+        
+        // Goal post - vertical (right edge)
+        grad = ctx.createLinearGradient(cw - postWidth, 0, cw, 0);
+        grad.addColorStop(0, '#a0a0a0');
+        grad.addColorStop(0.3, '#d0d0d0');
+        grad.addColorStop(0.7, '#ffffff');
+        grad.addColorStop(1, '#e8e8e8');
+        ctx.fillStyle = grad;
+        ctx.fillRect(cw - postWidth, groundY - goalHeight, postWidth, goalHeight);
+        
+        // Goal post - crossbar
+        grad = ctx.createLinearGradient(0, groundY - goalHeight, 0, groundY - goalHeight + postWidth);
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.5, '#e0e0e0');
+        grad.addColorStop(1, '#b0b0b0');
+        ctx.fillStyle = grad;
+        ctx.fillRect(cw - goalWidth, groundY - goalHeight, goalWidth, postWidth);
+        
+        // Post end caps
+        ctx.fillStyle = '#e0e0e0';
+        ctx.beginPath();
+        ctx.arc(cw - postWidth / 2, groundY - goalHeight + postWidth / 2, postWidth / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cw - goalWidth + postWidth / 2 - postWidth, groundY - goalHeight + postWidth / 2, postWidth / 2 + 1, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Post highlight line
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cw - 2, groundY - goalHeight + postWidth);
+        ctx.lineTo(cw - 2, groundY);
+        ctx.stroke();
+        
+        // Subtle glow at crossbar
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.15)';
+        ctx.shadowBlur = 8;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = postWidth + 4;
+        ctx.beginPath();
+        ctx.moveTo(cw - goalWidth, groundY - goalHeight + postWidth / 2);
+        ctx.lineTo(cw, groundY - goalHeight + postWidth / 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        
+        ctx.restore();
     }
     
     drawBall(ball = this.ball) {
         if (!ball) return;
-        
-        this.ctx.save();
-        
-        // Translate to ball position
-        this.ctx.translate(ball.x, ball.y);
-        
-        // Rotate based on ball rotation
-        this.ctx.rotate(ball.rotation);
-        
-        // Draw soccer ball at origin (since we translated)
-        this.ctx.fillStyle = 'white';
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
-        this.ctx.fill();
-        
-        // Black pentagons
-        this.ctx.fillStyle = 'black';
-        for (let i = 0; i < 5; i++) {
-            const angle = (i * Math.PI * 2 / 5);
-            const x = Math.cos(angle) * ball.radius * 0.6;
-            const y = Math.sin(angle) * ball.radius * 0.6;
-            this.ctx.beginPath();
-            this.ctx.arc(x, y, ball.radius * 0.25, 0, Math.PI * 2);
-            this.ctx.fill();
-        }
-        
-        this.ctx.restore();
+        const ctx = this.ctx;
+        const r = ball.radius;
         
         // Dynamic shadow that scales with ball height
         const groundY = this.physics.groundY;
         const ballHeight = groundY - ball.y;
-        const maxHeight = 200; // Maximum expected ball height
-        
-        // Scale shadow based on height (smaller and lighter when higher)
+        const maxHeight = 200;
         const heightRatio = Math.min(ballHeight / maxHeight, 1);
-        const shadowScale = 1 - (heightRatio * 0.6); // Shadow shrinks up to 60% when at max height
-        const shadowOpacity = 0.4 * (1 - heightRatio * 0.7); // Shadow fades when ball is high
+        const shadowScale = 1 - (heightRatio * 0.6);
+        const shadowOpacity = 0.45 * (1 - heightRatio * 0.7);
         
-        this.ctx.fillStyle = `rgba(0, 0, 0, ${shadowOpacity})`;
-        this.ctx.beginPath();
-        this.ctx.ellipse(
+        ctx.fillStyle = `rgba(0, 0, 0, ${shadowOpacity})`;
+        ctx.beginPath();
+        ctx.ellipse(
             ball.x, 
             groundY + 5, 
-            ball.radius * 0.8 * shadowScale, 
-            ball.radius * 0.3 * shadowScale, 
+            r * 0.9 * shadowScale, 
+            r * 0.25 * shadowScale, 
             0, 0, Math.PI * 2
         );
-        this.ctx.fill();
+        ctx.fill();
+        
+        ctx.save();
+        ctx.translate(ball.x, ball.y);
+        ctx.rotate(ball.rotation);
+        
+        // Speed-based outer glow
+        const speed = Math.sqrt((ball.vx || 0) ** 2 + (ball.vy || 0) ** 2);
+        if (speed > 3) {
+            const glowIntensity = Math.min((speed - 3) / 12, 0.5);
+            ctx.shadowColor = `rgba(0, 200, 255, ${glowIntensity})`;
+            ctx.shadowBlur = 8 + speed * 0.8;
+        }
+        
+        // Ball base (white with subtle gradient)
+        const ballGrad = ctx.createRadialGradient(-r * 0.25, -r * 0.25, r * 0.1, 0, 0, r);
+        ballGrad.addColorStop(0, '#ffffff');
+        ballGrad.addColorStop(0.6, '#f0f0f0');
+        ballGrad.addColorStop(1, '#cccccc');
+        ctx.fillStyle = ballGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = 'transparent';
+        
+        // Black pentagons (darker, slightly smaller for cleaner look)
+        ctx.fillStyle = '#1a1a2e';
+        for (let i = 0; i < 5; i++) {
+            const angle = (i * Math.PI * 2 / 5);
+            const px = Math.cos(angle) * r * 0.55;
+            const py = Math.sin(angle) * r * 0.55;
+            ctx.beginPath();
+            ctx.arc(px, py, r * 0.22, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // Center pentagon
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Panel lines connecting pentagons
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+        ctx.lineWidth = 0.8;
+        for (let i = 0; i < 5; i++) {
+            const a1 = (i * Math.PI * 2 / 5);
+            const a2 = ((i + 1) * Math.PI * 2 / 5);
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(a1) * r * 0.55, Math.sin(a1) * r * 0.55);
+            ctx.lineTo(Math.cos(a2) * r * 0.55, Math.sin(a2) * r * 0.55);
+            ctx.stroke();
+            // Line to edge
+            const midA = (a1 + a2) / 2;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(midA) * r * 0.55, Math.sin(midA) * r * 0.55);
+            ctx.lineTo(Math.cos(midA) * r * 0.92, Math.sin(midA) * r * 0.92);
+            ctx.stroke();
+        }
+        
+        // Specular highlight
+        const specGrad = ctx.createRadialGradient(-r * 0.3, -r * 0.35, 0, -r * 0.2, -r * 0.25, r * 0.6);
+        specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
+        specGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.15)');
+        specGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = specGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Subtle outline
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        ctx.restore();
     }
     
     drawPlayer(player, bug) {
@@ -2681,6 +2985,17 @@ class Game {
         this.ctx.save();
         this.ctx.translate(player.x, player.y);
         
+        // Outer glow around player
+        const glowColor = bug.color || '#00d4ff';
+        this.ctx.shadowColor = glowColor;
+        this.ctx.shadowBlur = 12;
+        this.ctx.fillStyle = 'rgba(0,0,0,0)';
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, player.width / 2 + 2, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.shadowBlur = 0;
+        this.ctx.shadowColor = 'transparent';
+        
         // Flip if facing left
         if (player.facing === -1) {
             this.ctx.scale(-1, 1);
@@ -2698,25 +3013,30 @@ class Game {
             }
         }
         
-        // Draw bug SVG (simplified rendering - in reality we'd parse SVG)
-        // For now, draw a colored circle with the bug color
-        this.ctx.fillStyle = bug.color;
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, player.width / 2, 0, Math.PI * 2);
-        this.ctx.fill();
-        
-        // Draw eyes
-        this.ctx.fillStyle = 'white';
-        this.ctx.beginPath();
-        this.ctx.arc(-player.width * 0.15, -player.height * 0.1, player.width * 0.15, 0, Math.PI * 2);
-        this.ctx.arc(player.width * 0.15, -player.height * 0.1, player.width * 0.15, 0, Math.PI * 2);
-        this.ctx.fill();
-        
-        this.ctx.fillStyle = 'black';
-        this.ctx.beginPath();
-        this.ctx.arc(-player.width * 0.15, -player.height * 0.1, player.width * 0.08, 0, Math.PI * 2);
-        this.ctx.arc(player.width * 0.15, -player.height * 0.1, player.width * 0.08, 0, Math.PI * 2);
-        this.ctx.fill();
+        // Draw bug SVG (pre-rendered if cached, else fallback to circle)
+        const spriteSize = Math.max(player.width, player.height);
+        const cached = this.preRenderBugSprite(bug.id, spriteSize, spriteSize);
+        if (cached) {
+            this.ctx.drawImage(cached, -spriteSize / 2, -spriteSize / 2, spriteSize, spriteSize);
+        } else {
+            // Fallback: colored circle with eyes
+            this.ctx.fillStyle = bug.color;
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, player.width / 2, 0, Math.PI * 2);
+            this.ctx.fill();
+            
+            this.ctx.fillStyle = 'white';
+            this.ctx.beginPath();
+            this.ctx.arc(-player.width * 0.15, -player.height * 0.1, player.width * 0.15, 0, Math.PI * 2);
+            this.ctx.arc(player.width * 0.15, -player.height * 0.1, player.width * 0.15, 0, Math.PI * 2);
+            this.ctx.fill();
+            
+            this.ctx.fillStyle = 'black';
+            this.ctx.beginPath();
+            this.ctx.arc(-player.width * 0.15, -player.height * 0.1, player.width * 0.08, 0, Math.PI * 2);
+            this.ctx.arc(player.width * 0.15, -player.height * 0.1, player.width * 0.08, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
         
         // Draw foreground cosmetics (hats, glasses, special) in transformed space
         if (player === this.player1 && this.ui.currentProfile && this.ui.currentProfile.equippedCosmetics) {
@@ -2739,24 +3059,26 @@ class Game {
         
         // Draw "BOSS" or "AI" label above AI-controlled players
         if (player.isBoss) {
-            // Boss label - larger and golden
+            // Boss label - premium style
             this.ctx.save();
-            this.ctx.font = 'bold 18px Arial';
-            this.ctx.fillStyle = 'rgba(255, 215, 0, 1)'; // Gold color
-            this.ctx.strokeStyle = 'rgba(139, 69, 19, 0.9)'; // Dark brown outline
+            this.ctx.font = 'bold 16px Orbitron, Arial';
+            this.ctx.fillStyle = '#FFD700';
+            this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
             this.ctx.lineWidth = 4;
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'bottom';
+            this.ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
+            this.ctx.shadowBlur = 10;
             
             const labelY = player.y - player.height / 2 - 15;
             this.ctx.strokeText('BOSS', player.x, labelY);
             this.ctx.fillText('BOSS', player.x, labelY);
             this.ctx.restore();
         } else if (isAI) {
-            // Regular AI label
+            // AI label - subtle premium style
             this.ctx.save();
-            this.ctx.font = 'bold 14px Arial';
-            this.ctx.fillStyle = 'rgba(255, 100, 100, 0.9)';
+            this.ctx.font = 'bold 12px Orbitron, Arial';
+            this.ctx.fillStyle = 'rgba(255, 100, 100, 0.85)';
             this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
             this.ctx.lineWidth = 3;
             this.ctx.textAlign = 'center';
@@ -2769,6 +3091,69 @@ class Game {
         }
     }
     
+    playGoalReplay(onComplete) {
+        if (this.replayFrames.length === 0) { onComplete(); return; }
+        this.replayPlaying = true;
+        this.replayIndex = 0;
+        const framesPerTick = 0.5; // half-speed playback
+        let accumulator = 0;
+        const step = () => {
+            if (this.replayIndex >= this.replayFrames.length) {
+                this.replayPlaying = false;
+                onComplete();
+                return;
+            }
+            accumulator += framesPerTick;
+            while (accumulator >= 1 && this.replayIndex < this.replayFrames.length) {
+                this.replayIndex++;
+                accumulator -= 1;
+            }
+            const f = this.replayFrames[Math.min(this.replayIndex, this.replayFrames.length - 1)];
+            // Draw the scene from recorded frame
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            drawArenaBackground(this.ctx, this.selectedArena, this.canvas.width, this.canvas.height, this.quality, this.gameMode, this.towerLevel);
+            this.drawGoals();
+            // Draw players from frame
+            const drawReplayPlayer = (pd, bugId) => {
+                this.ctx.save();
+                this.ctx.globalAlpha = 0.85;
+                const bug = getBugById(bugId);
+                const color = bug ? bug.color : '#e74c3c';
+                this.ctx.fillStyle = color;
+                this.ctx.beginPath();
+                this.ctx.arc(pd.x, pd.y, 25, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.restore();
+            };
+            drawReplayPlayer(f.p1, this.selectedBug1);
+            drawReplayPlayer(f.p2, this.selectedBug2);
+            if (f.p3) drawReplayPlayer(f.p3, this.selectedBug3);
+            // Draw ball from frame
+            this.ctx.save();
+            this.ctx.translate(f.ball.x, f.ball.y);
+            this.ctx.rotate(f.ball.rotation || 0);
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, this.ball.radius || 15, 0, Math.PI * 2);
+            this.ctx.fillStyle = 'white';
+            this.ctx.fill();
+            this.ctx.strokeStyle = '#333';
+            this.ctx.lineWidth = 2;
+            this.ctx.stroke();
+            this.ctx.restore();
+            // Overlay banner
+            this.ctx.save();
+            this.ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            this.ctx.fillRect(0, 10, this.canvas.width, 36);
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = 'bold 20px Orbitron, Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('INSTANT REPLAY', this.canvas.width / 2, 34);
+            this.ctx.restore();
+            requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+    }
+
     handleGoal(goal, ballIndex = 0) {
         // Prevent multiple goal detections
         if (this.gameState !== 'playing') {
@@ -2847,6 +3232,13 @@ class Game {
         
         this.updateScoreDisplay();
         
+        // Snapshot replay buffer and play instant replay
+        this.replayFrames = this.replayBuffer.slice();
+        this.replayBuffer = [];
+        this.playGoalReplay(() => {
+            this.replayPlaying = false;
+        });
+        
         // Reset positions after a short delay
         setTimeout(() => {
             // Reinitialize balls to match the correct count
@@ -2890,7 +3282,8 @@ class Game {
         }, 1000);
         
         // Check if match should end
-        if (this.score1 >= this.scoreToWin || this.score2 >= this.scoreToWin) {
+        const goldenEnd = this.goldenGoalActive && this.score1 !== this.score2;
+        if (this.score1 >= this.scoreToWin || this.score2 >= this.scoreToWin || goldenEnd) {
             setTimeout(() => {
                 this.endMatch();
             }, 1000);
@@ -2912,11 +3305,19 @@ class Game {
     }
     
     updateTimerDisplay() {
-        const timeRemaining = Math.max(0, this.matchTimeLimit - this.matchTimeElapsed);
-        const minutes = Math.floor(timeRemaining / 60);
-        const seconds = Math.floor(timeRemaining % 60);
-        document.getElementById('timerDisplay').textContent = 
-            `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        if (this.matchMode === 'first_to_3') {
+            // Show elapsed time for untimed modes
+            const minutes = Math.floor(this.matchTimeElapsed / 60);
+            const seconds = Math.floor(this.matchTimeElapsed % 60);
+            document.getElementById('timerDisplay').textContent = 
+                `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        } else {
+            const timeRemaining = Math.max(0, this.matchTimeLimit - this.matchTimeElapsed);
+            const minutes = Math.floor(timeRemaining / 60);
+            const seconds = Math.floor(timeRemaining % 60);
+            document.getElementById('timerDisplay').textContent = 
+                `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
     }
     
     
@@ -3251,6 +3652,21 @@ class Game {
         };
         SaveSystem.updateStats(this.ui.currentProfile, matchResult);
         
+        // Update challenge progress
+        this.updateChallenges();
+        
+        // Dynamic difficulty adjustment
+        if (this.gameMode !== 'multiplayer') {
+            if (playerWon) {
+                this.dynamicDifficulty.streak = Math.max(1, this.dynamicDifficulty.streak + 1);
+            } else if (!isDraw) {
+                this.dynamicDifficulty.streak = Math.min(-1, this.dynamicDifficulty.streak - 1);
+            }
+            // Shift modifier toward streak direction (clamped -0.2 to 0.2)
+            this.dynamicDifficulty.modifier = Math.max(-0.2,
+                Math.min(0.2, this.dynamicDifficulty.streak * 0.05));
+        }
+        
         // Update tower progress
         if (this.gameMode === 'tower' && playerWon) {
             SaveSystem.updateTowerProgress(this.ui.currentProfile, this.towerLevel);
@@ -3294,7 +3710,7 @@ class Game {
             } else {
                 titleEl.textContent = 'Victory!';
             }
-            titleEl.style.color = '#7ed321';
+            titleEl.style.color = '#00d4ff';
         } else {
             titleEl.textContent = 'Defeat';
             titleEl.style.color = '#ff4444';
@@ -3309,7 +3725,7 @@ class Game {
         let statsHTML = `
             <div class="stat-row">
                 <span>Final Score:</span>
-                <span style="color: #7ed321; font-size: 24px;">${this.score1} - ${this.score2}</span>
+                <span style="color: #00d4ff; font-size: 24px;">${this.score1} - ${this.score2}</span>
             </div>
         `;
         
@@ -3354,11 +3770,11 @@ class Game {
             </p>
             <div class="stat-row">
                 <span>Total Wins:</span>
-                <span style="color: #7ed321;">${this.ui.currentProfile.stats.wins}</span>
+                <span style="color: #00d4ff;">${this.ui.currentProfile.stats.wins}</span>
             </div>
             <div class="stat-row">
                 <span>Total Goals:</span>
-                <span style="color: #7ed321;">${this.ui.currentProfile.stats.goalsScored}</span>
+                <span style="color: #00d4ff;">${this.ui.currentProfile.stats.goalsScored}</span>
             </div>
             <div class="stat-row">
                 <span>Tower Mastery:</span>
@@ -3589,6 +4005,23 @@ class Game {
             document.getElementById('pauseScore1').textContent = this.score1;
             document.getElementById('pauseScore2').textContent = this.score2;
             
+            // Show mode/level context
+            let modeText = '';
+            if (this.gameMode === 'tower') {
+                modeText = `Tower Level ${this.towerLevel}`;
+            } else if (this.gameMode === 'quickplay') {
+                modeText = `Quick Play (${this.difficulty})`;
+            } else if (this.gameMode === 'multiplayer') {
+                modeText = 'Multiplayer';
+            } else if (this.gameMode === 'arcade') {
+                modeText = 'Arcade';
+            }
+            if (this.matchMode && this.matchMode !== 'normal') {
+                modeText += ` — ${this.matchMode.replace('_', ' ')}`;
+            }
+            const modeEl = document.getElementById('pauseModeInfo');
+            if (modeEl) modeEl.textContent = modeText;
+            
             const minutes = Math.floor(this.matchTimeElapsed / 60);
             const seconds = Math.floor(this.matchTimeElapsed % 60);
             document.getElementById('pauseTimeDisplay').textContent = 
@@ -3633,6 +4066,453 @@ class Game {
         
         // Restart the match with intro
         this.startMatch();
+    }
+    
+    // --- Challenge System ---
+    getChallengePool() {
+        return [
+            { id: 'score5', desc: 'Score 5 goals', stat: 'totalGoals', target: 5, reward: '🏅' },
+            { id: 'win3', desc: 'Win 3 matches', stat: 'totalWins', target: 3, reward: '🎖️' },
+            { id: 'clean_sheet', desc: 'Win without conceding a goal', stat: 'perfectGames', target: 1, reward: '🧤' },
+            { id: 'score10', desc: 'Score 10 goals', stat: 'totalGoals', target: 10, reward: '⚽' },
+            { id: 'quick2', desc: 'Score 2 quick goals (under 10s)', stat: 'quickGoals', target: 2, reward: '⚡' },
+            { id: 'play5', desc: 'Play 5 matches', stat: 'totalMatches', target: 5, reward: '🎮' },
+            { id: 'comeback1', desc: 'Win a comeback match', stat: 'comebacks', target: 1, reward: '🔥' },
+            { id: 'win5', desc: 'Win 5 matches', stat: 'totalWins', target: 5, reward: '🏆' }
+        ];
+    }
+
+    generateChallenges() {
+        const pool = this.getChallengePool();
+        const shuffled = pool.sort(() => Math.random() - 0.5);
+        this.challenges = shuffled.slice(0, 3).map(c => ({
+            ...c,
+            progress: 0,
+            complete: false,
+            startStat: 0
+        }));
+    }
+
+    initChallengesFromProfile() {
+        const profile = this.ui.currentProfile;
+        if (!profile) return;
+        if (!profile.challenges || !profile.challenges.list || profile.challenges.list.length === 0) {
+            this.generateChallenges();
+            this.saveChallenges();
+        } else {
+            this.challenges = profile.challenges.list;
+        }
+        // Capture starting stat values for delta tracking
+        const stats = profile.achievementProgress ? profile.achievementProgress.stats : {};
+        for (const c of this.challenges) {
+            if (!c.complete) c.startStat = stats[c.stat] || 0;
+        }
+    }
+
+    updateChallenges() {
+        const profile = this.ui.currentProfile;
+        if (!profile || !profile.achievementProgress) return;
+        const stats = profile.achievementProgress.stats;
+        let changed = false;
+        for (const c of this.challenges) {
+            if (c.complete) continue;
+            const current = (stats[c.stat] || 0) - c.startStat;
+            if (current !== c.progress) {
+                c.progress = current;
+                changed = true;
+            }
+            if (c.progress >= c.target) {
+                c.complete = true;
+                changed = true;
+            }
+        }
+        if (changed) this.saveChallenges();
+    }
+
+    saveChallenges() {
+        const profile = this.ui.currentProfile;
+        if (!profile) return;
+        if (!profile.challenges) profile.challenges = {};
+        profile.challenges.list = this.challenges;
+        SaveSystem.saveProfile(profile);
+    }
+
+    refreshChallenges() {
+        this.generateChallenges();
+        this.saveChallenges();
+        const profile = this.ui.currentProfile;
+        const stats = profile && profile.achievementProgress ? profile.achievementProgress.stats : {};
+        for (const c of this.challenges) {
+            c.startStat = stats[c.stat] || 0;
+        }
+    }
+
+    // --- Penalty Shootout ---
+    startPenaltyShootout() {
+        if (this.mainMenuBackground) this.mainMenuBackground.stop();
+        this.ui.showScreen('gameScreen');
+        this.resizeCanvas();
+        this.physics = new Physics(this.canvas.width, this.canvas.height);
+        this.applyCustomLayout();
+        
+        // Hide HUD elements not needed
+        const pauseBtn = document.getElementById('pauseBtn');
+        if (pauseBtn) pauseBtn.style.display = 'none';
+        const timerDisplay = document.getElementById('timerDisplay');
+        if (timerDisplay) timerDisplay.style.display = 'none';
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        if (scoreDisplay) scoreDisplay.style.display = 'block';
+        
+        this.selectedArena = getArenaById('grassField') || { id: 'grassField', name: 'Grass' };
+        this.selectedBug1 = getBugById('ladybug') || { id: 'ladybug', color: '#e74c3c' };
+        this.selectedBug2 = getBugById('beetle') || { id: 'beetle', color: '#3498db' };
+        
+        this.penaltyState = {
+            round: 1,
+            maxRounds: 5,
+            p1Goals: 0,
+            p2Goals: 0,
+            phase: 'aiming', // 'aiming', 'shooting', 'result', 'keeper_turn', 'done'
+            aimAngle: 0, // -1 to 1 (left to right)
+            aimDir: 1,
+            power: 0,
+            powerDir: 1,
+            keeperDive: 0, // -1 left, 0 center, 1 right
+            shotBall: null,
+            resultTimer: 0,
+            isPlayerShooting: true // alternates each round
+        };
+        
+        this.score1 = 0;
+        this.score2 = 0;
+        this.updateScoreDisplay();
+        this.gameState = 'penalty';
+        
+        // Touch input for penalty
+        this._penaltyTouchHandler = (e) => {
+            e.preventDefault();
+            this._penaltyTap = true;
+        };
+        this.canvas.addEventListener('touchstart', this._penaltyTouchHandler, { passive: false });
+        this.canvas.addEventListener('click', this._penaltyTouchHandler);
+        
+        if (this.animationId) cancelAnimationFrame(this.animationId);
+        this.penaltyLoop();
+    }
+
+    penaltyLoop() {
+        const ps = this.penaltyState;
+        if (!ps || this.gameState !== 'penalty') return;
+        
+        this.updatePenalty();
+        this.renderPenalty();
+        
+        this.animationId = requestAnimationFrame(() => this.penaltyLoop());
+    }
+
+    updatePenalty() {
+        const ps = this.penaltyState;
+        
+        if (ps.phase === 'aiming') {
+            // Oscillate aim angle
+            ps.aimAngle += ps.aimDir * 0.02;
+            if (ps.aimAngle > 1) { ps.aimAngle = 1; ps.aimDir = -1; }
+            if (ps.aimAngle < -1) { ps.aimAngle = -1; ps.aimDir = 1; }
+            
+            // Tap/click/space to lock aim → move to power
+            if (this.keys[' '] || this.keys['ArrowUp'] || this._penaltyTap) {
+                this._penaltyTap = false;
+                this.keys[' '] = false;
+                this.keys['ArrowUp'] = false;
+                ps.phase = 'power';
+                ps.power = 0;
+                ps.powerDir = 1;
+            }
+        } else if (ps.phase === 'power') {
+            // Oscillate power
+            ps.power += ps.powerDir * 0.025;
+            if (ps.power > 1) { ps.power = 1; ps.powerDir = -1; }
+            if (ps.power < 0) { ps.power = 0; ps.powerDir = 1; }
+            
+            if (this.keys[' '] || this.keys['ArrowUp'] || this._penaltyTap) {
+                this._penaltyTap = false;
+                this.keys[' '] = false;
+                this.keys['ArrowUp'] = false;
+                this.shootPenalty();
+            }
+        } else if (ps.phase === 'shooting') {
+            // Animate ball
+            if (ps.shotBall) {
+                ps.shotBall.x += ps.shotBall.vx;
+                ps.shotBall.y += ps.shotBall.vy;
+                ps.shotBall.vy += 0.3; // gravity
+            }
+            ps.resultTimer++;
+            if (ps.resultTimer > 60) {
+                ps.phase = 'result';
+                ps.resultTimer = 0;
+            }
+        } else if (ps.phase === 'result') {
+            ps.resultTimer++;
+            if (ps.resultTimer > 90) {
+                // Advance round
+                ps.round++;
+                if (ps.round > ps.maxRounds) {
+                    // Check if we need extra rounds (tie)
+                    if (ps.p1Goals === ps.p2Goals) {
+                        ps.maxRounds += 1; // sudden death extra rounds
+                    } else {
+                        ps.phase = 'done';
+                        this.score1 = ps.p1Goals;
+                        this.score2 = ps.p2Goals;
+                        this.updateScoreDisplay();
+                        return;
+                    }
+                }
+                ps.isPlayerShooting = !ps.isPlayerShooting;
+                ps.phase = ps.isPlayerShooting ? 'aiming' : 'keeper_turn';
+                ps.resultTimer = 0;
+                ps.shotBall = null;
+            }
+        } else if (ps.phase === 'keeper_turn') {
+            // AI takes a shot (auto-resolved after brief delay)
+            ps.resultTimer++;
+            if (ps.resultTimer === 1) {
+                // AI shoots with some randomness
+                const aiAim = (Math.random() - 0.5) * 1.6;
+                const aiPower = 0.6 + Math.random() * 0.4;
+                // Player dives (random for now since no input)
+                const playerDive = Math.random() < 0.33 ? -1 : (Math.random() < 0.5 ? 0 : 1);
+                const aimSide = aiAim < -0.33 ? -1 : (aiAim > 0.33 ? 1 : 0);
+                const saved = (playerDive === aimSide);
+                if (!saved) ps.p2Goals++;
+                
+                this.score1 = ps.p1Goals;
+                this.score2 = ps.p2Goals;
+                this.updateScoreDisplay();
+                
+                ps.shotBall = this.createPenaltyShotBall(aiAim, aiPower);
+                ps.keeperDive = playerDive;
+                ps._lastResult = saved ? 'SAVED!' : 'GOAL!';
+                ps._lastResultIsPlayer = false;
+            }
+            if (ps.resultTimer > 120) {
+                ps.round++;
+                if (ps.round > ps.maxRounds) {
+                    if (ps.p1Goals === ps.p2Goals) {
+                        ps.maxRounds += 1;
+                    } else {
+                        ps.phase = 'done';
+                        return;
+                    }
+                }
+                ps.isPlayerShooting = true;
+                ps.phase = 'aiming';
+                ps.resultTimer = 0;
+                ps.shotBall = null;
+            }
+        } else if (ps.phase === 'done') {
+            ps.resultTimer++;
+            if (ps.resultTimer > 180) {
+                // Cleanup touch handler
+                if (this._penaltyTouchHandler) {
+                    this.canvas.removeEventListener('touchstart', this._penaltyTouchHandler);
+                    this.canvas.removeEventListener('click', this._penaltyTouchHandler);
+                }
+                // Return to menu
+                cancelAnimationFrame(this.animationId);
+                this.gameState = 'menu';
+                this.penaltyState = null;
+                this.ui.showMainMenu();
+                if (this.mainMenuBackground) {
+                    this.mainMenuBackground.setupMatch();
+                    this.mainMenuBackground.start();
+                }
+            }
+        }
+    }
+
+    shootPenalty() {
+        const ps = this.penaltyState;
+        // Keeper dives
+        const diveChoice = Math.random();
+        ps.keeperDive = diveChoice < 0.33 ? -1 : (diveChoice < 0.66 ? 0 : 1);
+        
+        ps.shotBall = this.createPenaltyShotBall(ps.aimAngle, ps.power);
+        
+        // Determine if goal
+        const aimSide = ps.aimAngle < -0.33 ? -1 : (ps.aimAngle > 0.33 ? 1 : 0);
+        const saved = (ps.keeperDive === aimSide && ps.power < 0.9);
+        if (!saved) ps.p1Goals++;
+        
+        this.score1 = ps.p1Goals;
+        this.score2 = ps.p2Goals;
+        this.updateScoreDisplay();
+        
+        ps._lastResult = saved ? 'SAVED!' : 'GOAL!';
+        ps._lastResultIsPlayer = true;
+        ps.phase = 'shooting';
+        ps.resultTimer = 0;
+        this.audio.playSoundWithHaptic(saved ? 'crossbar_hit' : 'goal', [50, 30, 50]);
+    }
+
+    createPenaltyShotBall(aim, power) {
+        const cx = this.canvas.width / 2;
+        const groundY = this.physics ? this.physics.groundY : this.canvas.height * 0.85;
+        return {
+            x: cx,
+            y: groundY - 20,
+            vx: aim * (8 + power * 6),
+            vy: -(10 + power * 8),
+            radius: 15
+        };
+    }
+
+    renderPenalty() {
+        const ps = this.penaltyState;
+        const ctx = this.ctx;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const groundY = this.physics ? this.physics.groundY : h * 0.85;
+        
+        ctx.clearRect(0, 0, w, h);
+        drawArenaBackground(ctx, this.selectedArena, w, h, this.quality, 'quickplay', 1);
+        this.drawGoals();
+        
+        // Draw keeper
+        const keeperX = w - 50;
+        const keeperY = groundY - 30;
+        const diveOffset = ps.keeperDive * 40;
+        ctx.save();
+        ctx.fillStyle = this.selectedBug2.color || '#3498db';
+        ctx.beginPath();
+        ctx.arc(keeperX + (ps.phase === 'shooting' || ps.phase === 'result' || ps.phase === 'keeper_turn' ? diveOffset : 0), keeperY, 25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        
+        // Draw shooter
+        ctx.save();
+        ctx.fillStyle = this.selectedBug1.color || '#e74c3c';
+        ctx.beginPath();
+        ctx.arc(w / 2, groundY - 20, 25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        
+        // Draw ball
+        if (ps.shotBall) {
+            ctx.save();
+            ctx.fillStyle = 'white';
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(ps.shotBall.x, ps.shotBall.y, ps.shotBall.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        } else {
+            // Ball at shooter's feet
+            ctx.save();
+            ctx.fillStyle = 'white';
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(w / 2 + 20, groundY - 10, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+        
+        // Draw aim indicator
+        if (ps.phase === 'aiming') {
+            const goalRight = w - 100;
+            const goalTop = groundY - 120;
+            const targetX = goalRight + 50 + ps.aimAngle * 45;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(w / 2, groundY - 20);
+            ctx.lineTo(targetX, goalTop + 60);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+            
+            ctx.save();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 18px Orbitron, Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Press SPACE to aim', w / 2, 40);
+            ctx.restore();
+        }
+        
+        // Draw power bar
+        if (ps.phase === 'power') {
+            const barX = 30;
+            const barY = h / 2 - 80;
+            const barW = 20;
+            const barH = 160;
+            ctx.save();
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(barX, barY, barW, barH);
+            const fillH = ps.power * barH;
+            const green = Math.floor(255 * (1 - ps.power));
+            const red = Math.floor(255 * ps.power);
+            ctx.fillStyle = `rgb(${red},${green},0)`;
+            ctx.fillRect(barX, barY + barH - fillH, barW, fillH);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(barX, barY, barW, barH);
+            ctx.restore();
+            
+            ctx.save();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 18px Orbitron, Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Press SPACE for power', w / 2, 40);
+            ctx.restore();
+        }
+        
+        // Result text
+        if ((ps.phase === 'result' || ps.phase === 'shooting' || ps.phase === 'keeper_turn') && ps._lastResult) {
+            ctx.save();
+            ctx.fillStyle = ps._lastResult === 'GOAL!' ? '#00d4ff' : '#ff4444';
+            ctx.font = 'bold 36px Orbitron, Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(ps._lastResult, w / 2, h / 2 - 30);
+            ctx.restore();
+        }
+        
+        // Round info
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 16px Orbitron, Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Round ${Math.min(ps.round, ps.maxRounds)} / ${ps.maxRounds}`, w / 2, h - 20);
+        ctx.restore();
+        
+        // Score
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 20px Orbitron, Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`You ${ps.p1Goals} - ${ps.p2Goals} CPU`, w / 2, 70);
+        ctx.restore();
+        
+        // Done screen
+        if (ps.phase === 'done') {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.fillRect(0, 0, w, h);
+            ctx.fillStyle = ps.p1Goals > ps.p2Goals ? '#00d4ff' : '#ff4444';
+            ctx.font = 'bold 40px Orbitron, Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(ps.p1Goals > ps.p2Goals ? 'YOU WIN!' : 'YOU LOSE!', w / 2, h / 2 - 20);
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px Rajdhani, Arial';
+            ctx.fillText(`${ps.p1Goals} - ${ps.p2Goals}`, w / 2, h / 2 + 20);
+            ctx.restore();
+        }
     }
     
     quitToMenu() {

@@ -216,14 +216,23 @@ export function getArenaById(id) {
 }
 
 export function drawArenaBackground(ctx, arena, width, height, qualitySettings = null, gameMode = null, towerLevel = 1) {
-    // Sky gradient
+    const groundHeight = height * 0.3;
+    const groundY = height - groundHeight;
+    
+    // Sky gradient (richer with midpoint)
     const skyGradient = ctx.createLinearGradient(0, 0, 0, height);
     skyGradient.addColorStop(0, arena.skyColors[0]);
-    skyGradient.addColorStop(1, arena.skyColors[1]);
+    skyGradient.addColorStop(0.6, arena.skyColors[1]);
+    skyGradient.addColorStop(1, shadeColor(arena.skyColors[1], -15));
     ctx.fillStyle = skyGradient;
     ctx.fillRect(0, 0, width, height);
     
-    // Tower visualization removed - now only shown in preview screen
+    // Atmospheric haze near horizon
+    const hazeGrad = ctx.createLinearGradient(0, groundY - 40, 0, groundY + 10);
+    hazeGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    hazeGrad.addColorStop(1, 'rgba(255, 255, 255, 0.06)');
+    ctx.fillStyle = hazeGrad;
+    ctx.fillRect(0, groundY - 40, width, 50);
     
     // Special weather effects in background (skip on low quality)
     const showWeatherEffects = !qualitySettings || qualitySettings.getSetting('grassBlades') !== false;
@@ -240,20 +249,27 @@ export function drawArenaBackground(ctx, arena, width, height, qualitySettings =
     }
     
     // Ground
-    const groundHeight = height * 0.3;
-    const groundGradient = ctx.createLinearGradient(0, height - groundHeight, 0, height);
+    const groundGradient = ctx.createLinearGradient(0, groundY, 0, height);
     groundGradient.addColorStop(0, arena.groundColor);
-    groundGradient.addColorStop(1, shadeColor(arena.groundColor, -20));
+    groundGradient.addColorStop(0.4, shadeColor(arena.groundColor, -8));
+    groundGradient.addColorStop(1, shadeColor(arena.groundColor, -25));
     ctx.fillStyle = groundGradient;
-    ctx.fillRect(0, height - groundHeight, width, groundHeight);
+    ctx.fillRect(0, groundY, width, groundHeight);
     
-    // Ground line
-    ctx.strokeStyle = shadeColor(arena.groundColor, -30);
-    ctx.lineWidth = 3;
+    // Ground line (softer glow)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(0, height - groundHeight);
-    ctx.lineTo(width, height - groundHeight);
+    ctx.moveTo(0, groundY);
+    ctx.lineTo(width, groundY);
     ctx.stroke();
+    
+    // Subtle ground shadow at the top of the ground
+    const groundShadow = ctx.createLinearGradient(0, groundY, 0, groundY + 8);
+    groundShadow.addColorStop(0, 'rgba(0, 0, 0, 0.12)');
+    groundShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = groundShadow;
+    ctx.fillRect(0, groundY, width, 8);
     
     // Special ground textures
     if (!arena.grassBlades) {
@@ -266,15 +282,46 @@ export function drawArenaBackground(ctx, arena, width, height, qualitySettings =
         }
     }
     
-    // Center line
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    // --- Field Markings ---
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
     ctx.lineWidth = 2;
-    ctx.setLineDash([10, 10]);
+    
+    // Center line (solid, subtle)
     ctx.beginPath();
-    ctx.moveTo(width / 2, height - groundHeight);
+    ctx.moveTo(width / 2, groundY);
     ctx.lineTo(width / 2, height);
     ctx.stroke();
-    ctx.setLineDash([]);
+    
+    // Center circle
+    const circleRadius = groundHeight * 0.5;
+    ctx.beginPath();
+    ctx.arc(width / 2, groundY + groundHeight / 2, circleRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Center dot
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.beginPath();
+    ctx.arc(width / 2, groundY + groundHeight / 2, 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Left penalty area
+    const penWidth = 80;
+    const penHeight = groundHeight * 0.7;
+    const penTop = groundY + (groundHeight - penHeight) / 2;
+    ctx.strokeRect(0, penTop, penWidth, penHeight);
+    
+    // Right penalty area
+    ctx.strokeRect(width - penWidth, penTop, penWidth, penHeight);
+    
+    ctx.restore();
+    
+    // Subtle vignette overlay
+    const vigGrad = ctx.createRadialGradient(width / 2, height / 2, height * 0.3, width / 2, height / 2, height * 0.9);
+    vigGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    vigGrad.addColorStop(1, 'rgba(0, 0, 0, 0.15)');
+    ctx.fillStyle = vigGrad;
+    ctx.fillRect(0, 0, width, height);
 }
 
 function drawDirtTexture(ctx, width, height, groundHeight) {
@@ -325,14 +372,14 @@ function drawCandyTexture(ctx, width, height, groundHeight) {
 }
 
 function drawSnowfall(ctx, width, height) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    
     const time = Date.now() / 1000;
-    for (let i = 0; i < 50; i++) {
-        const x = (i * 37 + time * 20) % width;
-        const y = (i * 53 + time * 30) % height;
-        const size = 2 + (i % 3);
+    for (let i = 0; i < 60; i++) {
+        const x = (i * 37 + time * (15 + (i % 5) * 3) + Math.sin(time * 0.5 + i) * 15) % width;
+        const y = (i * 53 + time * (25 + (i % 4) * 5)) % height;
+        const size = 1.5 + (i % 4);
+        const alpha = 0.3 + (i % 3) * 0.15;
         
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
         ctx.beginPath();
         ctx.arc(x, y, size, 0, Math.PI * 2);
         ctx.fill();
@@ -340,14 +387,15 @@ function drawSnowfall(ctx, width, height) {
 }
 
 function drawStars(ctx, width, height) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    
-    // Fixed star positions (pseudo-random but consistent)
-    for (let i = 0; i < 100; i++) {
+    const time = Date.now() / 1000;
+    // Fixed star positions with twinkling
+    for (let i = 0; i < 120; i++) {
         const x = (i * 73) % width;
         const y = (i * 127) % (height * 0.7);
-        const size = 1 + (i % 3);
+        const size = 0.5 + (i % 4);
+        const twinkle = 0.4 + 0.4 * Math.sin(time * (1 + (i % 3) * 0.5) + i);
         
+        ctx.fillStyle = `rgba(255, 255, 255, ${twinkle})`;
         ctx.beginPath();
         ctx.arc(x, y, size, 0, Math.PI * 2);
         ctx.fill();
@@ -355,24 +403,32 @@ function drawStars(ctx, width, height) {
 }
 
 function drawNeonGrid(ctx, width, height) {
-    ctx.strokeStyle = 'rgba(255, 0, 255, 0.3)';
-    ctx.lineWidth = 1;
+    const time = Date.now() / 2000;
     
-    // Vertical lines
+    // Perspective neon grid
+    ctx.lineWidth = 1;
     for (let x = 0; x < width; x += 50) {
+        const pulse = 0.15 + 0.1 * Math.sin(time + x * 0.01);
+        ctx.strokeStyle = `rgba(255, 0, 255, ${pulse})`;
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, height * 0.7);
         ctx.stroke();
     }
     
-    // Horizontal lines
     for (let y = 0; y < height * 0.7; y += 50) {
+        const pulse = 0.15 + 0.1 * Math.sin(time * 1.5 + y * 0.01);
+        ctx.strokeStyle = `rgba(0, 255, 255, ${pulse})`;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(width, y);
         ctx.stroke();
     }
+    
+    // Scanline effect
+    ctx.fillStyle = 'rgba(0, 255, 255, 0.03)';
+    const scanY = ((time * 80) % (height * 0.7));
+    ctx.fillRect(0, scanY, width, 3);
 }
 
 function drawSparkles(ctx, width, height) {

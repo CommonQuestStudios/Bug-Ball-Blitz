@@ -8,7 +8,13 @@ export class SaveSystem {
             return { success: false, error: 'Name cannot be empty' };
         }
         
-        const profileKey = SAVE_PREFIX + name.toLowerCase().replace(/\s+/g, '_');
+        // Sanitize and validate name
+        const trimmed = name.trim().replace(/[^a-zA-Z0-9 _-]/g, '').substring(0, 15);
+        if (trimmed.length === 0) {
+            return { success: false, error: 'Name must contain letters or numbers' };
+        }
+        
+        const profileKey = SAVE_PREFIX + trimmed.toLowerCase().replace(/\s+/g, '_');
         
         try {
             const existingData = localStorage.getItem(profileKey);
@@ -21,7 +27,7 @@ export class SaveSystem {
         }
         
         const profile = {
-            name: name.trim(),
+            name: trimmed,
             created: Date.now(),
             stats: {
                 wins: 0,

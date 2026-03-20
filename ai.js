@@ -21,6 +21,11 @@ export class AI {
         this.lastBallTouch = 0; // Frames since last touched ball
         this.strategyCooldown = 0; // Cooldown for strategy changes
         this.currentStrategy = 'defend'; // 'defend', 'attack', 'intercept'
+        
+        // Opponent velocity tracking for prediction
+        this.opponent = null; // Set externally after construction
+        this.opponentVxHistory = [];
+        this.opponentVxSampleMax = 10;
     }
     
     applyPersonality(personality) {
@@ -83,10 +88,28 @@ export class AI {
         return params[difficulty] || params.medium;
     }
     
+    applyDynamicModifier(modifier) {
+        // modifier ranges from -0.2 (easier) to +0.2 (harder)
+        const m = modifier;
+        this.params.predictionAccuracy = Math.max(0.1, Math.min(1.0, this.params.predictionAccuracy + m));
+        this.params.jumpTiming = Math.max(0.1, Math.min(1.0, this.params.jumpTiming + m));
+        this.params.maxSpeed = Math.max(0.3, Math.min(1.0, this.params.maxSpeed + m));
+        this.params.shotAccuracy = Math.max(0.1, Math.min(1.0, this.params.shotAccuracy + m));
+        this.params.reactionTime = Math.max(4, Math.round(this.params.reactionTime - m * 20));
+    }
+    
     update() {
         this.reactionTimer++;
         this.lastBallTouch++;
         this.strategyCooldown = Math.max(0, this.strategyCooldown - 1);
+        
+        // Track opponent velocity for prediction
+        if (this.opponent) {
+            this.opponentVxHistory.push(this.opponent.vx);
+            if (this.opponentVxHistory.length > this.opponentVxSampleMax) {
+                this.opponentVxHistory.shift();
+            }
+        }
         
         if (this.reactionTimer >= this.params.reactionTime) {
             this.reactionTimer = 0;
@@ -95,6 +118,12 @@ export class AI {
         }
         
         this.executeAction();
+    }
+    
+    predictOpponentDirection() {
+        if (this.opponentVxHistory.length < 3) return 0;
+        const avg = this.opponentVxHistory.reduce((a, b) => a + b, 0) / this.opponentVxHistory.length;
+        return avg; // positive = moving right, negative = moving left
     }
     
     evaluateStrategy() {
@@ -263,9 +292,13 @@ export class AI {
         // Position between ball and goal
         const defensivePosition = (ballX + ownGoalX) / 2;
         
+        // Anticipate opponent movement direction
+        const opponentTrend = this.predictOpponentDirection();
+        const anticipation = opponentTrend * this.params.predictionAccuracy * 30;
+        
         // Apply positioning skill - better AI positions more precisely
         const positioningError = (1 - this.params.positioning) * 80;
-        this.targetX = defensivePosition + (Math.random() - 0.5) * positioningError;
+        this.targetX = defensivePosition + anticipation + (Math.random() - 0.5) * positioningError;
         
         // Clamp to defensive zone
         if (this.side === 'right') {

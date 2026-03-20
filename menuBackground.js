@@ -468,7 +468,7 @@ export class MenuBackground {
         this.ctx.rotate(this.ball.rotation);
         
         // Draw the ball at origin (since we translated)
-        this.ctx.font = '30px Arial';
+        this.ctx.font = '30px Rajdhani, Arial';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText('⚽', 0, 0);
@@ -547,7 +547,7 @@ export class MenuBackground {
         this.ctx.globalAlpha = 1.0; // Force full opacity for celebrations
         
         // Draw floating emojis around the player
-        this.ctx.font = '30px Arial';
+        this.ctx.font = '30px Rajdhani, Arial';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         
@@ -561,7 +561,7 @@ export class MenuBackground {
         });
         
         // Draw "GOAL!" text (full opacity)
-        this.ctx.font = 'bold 40px Arial';
+        this.ctx.font = 'bold 40px Orbitron, Arial';
         this.ctx.fillStyle = '#FFD700';
         this.ctx.strokeStyle = '#000000';
         this.ctx.lineWidth = 4;

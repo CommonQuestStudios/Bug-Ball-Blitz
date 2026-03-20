@@ -84,7 +84,7 @@ export class UIManager {
             console.log(`🖱️ Version clicked! Count: ${this.devClickCount}/${this.devClickTarget}`);
             
             // Visual feedback - flash
-            versionElement.style.color = '#7ed321';
+            versionElement.style.color = '#00d4ff';
             versionElement.style.transform = 'scale(1.1)';
             setTimeout(() => {
                 versionElement.style.color = 'rgba(255, 255, 255, 0.7)';
@@ -353,7 +353,7 @@ export class UIManager {
         });
         
         document.getElementById('tutorialBtn').addEventListener('click', () => {
-            this.showScreen('tutorialScreen');
+            this.startTutorial();
         });
         
         document.getElementById('backToMainFromTutorialBtn').addEventListener('click', () => {
@@ -493,6 +493,7 @@ export class UIManager {
         if (this.game && this.game.achievements) {
             this.game.achievements.setProfile(this.currentProfile);
         }
+        if (this.game) this.game.initChallengesFromProfile();
         
         // Show main menu
         this.showMainMenu();
@@ -575,6 +576,7 @@ export class UIManager {
             if (this.game && this.game.achievements) {
                 this.game.achievements.setProfile(this.currentProfile);
             }
+            if (this.game) this.game.initChallengesFromProfile();
             
             this.showMainMenu();
             
@@ -600,6 +602,35 @@ export class UIManager {
             <p>Tower Level: ${this.currentProfile.tower.currentLevel} | 
                Wins: ${this.currentProfile.stats.wins}</p>
         `;
+        
+        // Populate challenge display
+        const challengeEl = document.getElementById('challengeDisplay');
+        if (challengeEl && this.game && this.game.challenges.length > 0) {
+            let html = '<h4>Challenges</h4>';
+            for (const c of this.game.challenges) {
+                const prog = Math.min(c.progress, c.target);
+                const cls = c.complete ? ' complete' : '';
+                html += `<div class="challenge-item${cls}">
+                    <span>${c.reward} ${c.desc}</span>
+                    <span class="challenge-progress">${prog}/${c.target}</span>
+                </div>`;
+            }
+            const allDone = this.game.challenges.every(c => c.complete);
+            if (allDone) {
+                html += `<button class="challenge-refresh" id="refreshChallengesBtn">New Challenges</button>`;
+            }
+            challengeEl.innerHTML = html;
+            if (allDone) {
+                const btn = document.getElementById('refreshChallengesBtn');
+                if (btn) btn.addEventListener('click', () => {
+                    this.game.refreshChallenges();
+                    this.showMainMenu();
+                });
+            }
+        } else if (challengeEl) {
+            challengeEl.innerHTML = '';
+        }
+        
         this.showScreen('mainMenu');
     }
     
@@ -734,10 +765,20 @@ export class UIManager {
                 bugCard.classList.add('selected');
             }
             
+            // Build progress text for locked bugs
+            let unlockText = `🔒 ${bug.unlockRequirement}`;
+            if (!isUnlocked && bug.unlockAchievement && achievementManager) {
+                const ach = achievementManager.achievements[bug.unlockAchievement];
+                if (ach && ach.stat && ach.requirement) {
+                    const current = achievementManager.stats[ach.stat] || 0;
+                    unlockText = `🔒 ${bug.unlockRequirement} (${current}/${ach.requirement})`;
+                }
+            }
+            
             bugCard.innerHTML = `
                 <div class="bug-sprite ${isUnlocked ? '' : 'locked-sprite'}">${bug.svg}</div>
                 <div class="bug-name">${bug.name}</div>
-                ${!isUnlocked ? `<div class="unlock-requirement">🔒 ${bug.unlockRequirement}</div>` : ''}
+                ${!isUnlocked ? `<div class="unlock-requirement">${unlockText}</div>` : ''}
                 <div class="bug-stats">
                     <div class="stat-bar-container">
                         <small>Speed</small>
@@ -850,11 +891,19 @@ export class UIManager {
             arenaName.textContent = arena.name;
             arenaCard.appendChild(arenaName);
             
-            // Show unlock requirement for locked arenas
+            // Show unlock requirement for locked arenas (with progress)
             if (!isUnlocked) {
+                let unlockText = `🔒 ${arena.unlockRequirement}`;
+                if (arena.unlockAchievement && achievementManager) {
+                    const ach = achievementManager.achievements[arena.unlockAchievement];
+                    if (ach && ach.stat && ach.requirement) {
+                        const current = achievementManager.stats[ach.stat] || 0;
+                        unlockText = `🔒 ${arena.unlockRequirement} (${current}/${ach.requirement})`;
+                    }
+                }
                 const unlockReq = document.createElement('div');
                 unlockReq.className = 'arena-unlock-requirement';
-                unlockReq.textContent = `🔒 ${arena.unlockRequirement}`;
+                unlockReq.textContent = unlockText;
                 arenaCard.appendChild(unlockReq);
             }
             

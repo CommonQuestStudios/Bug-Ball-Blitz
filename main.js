@@ -2060,10 +2060,8 @@ class Game {
             }
             this.render();
         } else if (this.gameState === 'goal_scored') {
-            // During replay, playGoalReplay handles its own rendering
-            if (!this.replayPlaying) {
-                this.renderCountdown(); // Reuse countdown render which includes celebration
-            }
+            // playGoalReplay handles all rendering via its own rAF loop;
+            // main loop just keeps ticking without drawing anything
         } else {
             this.animationId = null;
             return;
@@ -3326,7 +3324,8 @@ class Game {
         const matchOver = this.score1 >= this.scoreToWin || this.score2 >= this.scoreToWin || goldenEnd;
         
         this.playGoalReplay(() => {
-            this.replayPlaying = false;
+            // Clear replay data so it can't accidentally render again
+            this.replayFrames = [];
             
             if (matchOver) {
                 this.endMatch();

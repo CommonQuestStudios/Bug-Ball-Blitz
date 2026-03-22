@@ -2051,7 +2051,9 @@ class Game {
                 this._accumulator -= fixedStep;
                 if (this.gameState !== 'playing') break; // match may have ended
             }
-            this.render();
+            if (this.gameState === 'playing') {
+                this.render();
+            }
         } else if (this.gameState === 'goal_scored') {
             // playGoalReplay handles all rendering via its own rAF loop;
             // main loop just keeps ticking without drawing anything
@@ -2278,6 +2280,8 @@ class Game {
         if (this.countdownValue <= 0) {
             this.gameState = 'playing';
             this.lastFrameTime = performance.now(); // Start timer
+            this._accumulator = 0;    // Prevent burst of physics from time spent in countdown
+            this._lastLoopTime = null; // Fresh delta on first playing frame
         }
     }
     
@@ -3356,6 +3360,8 @@ class Game {
                 if (this.player3AI) this.player3AI.ball = this.ball;
 
                 this.lastFrameTime = null; // Pause timer
+                this._accumulator = 0;    // Reset physics accumulator so it doesn't build up during replay/countdown
+                this._lastLoopTime = null;
                 this.gameState = 'countdown';
                 this.countdownValue = 3;
                 this.initialCountdownValue = 3;

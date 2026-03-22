@@ -150,9 +150,9 @@ class Game {
         // Pre-rendered bug sprite cache (SVG → offscreen canvas)
         this.bugSpriteCache = {};
         
-        // Instant replay buffer (circular, stores last ~120 frames = ~2 seconds at 60fps)
+        // Instant replay buffer (circular, stores last ~300 frames = ~5 seconds at 60fps)
         this.replayBuffer = [];
-        this.replayBufferMax = 120;
+        this.replayBufferMax = 300;
         this.replayPlaying = false;
         this.replayIndex = 0;
         this.replayFrames = [];
@@ -2887,11 +2887,12 @@ class Game {
             ctx.shadowBlur = 8 + speed * 0.8;
         }
         
-        // Ball base (white with subtle gradient)
-        const ballGrad = ctx.createRadialGradient(-r * 0.25, -r * 0.25, r * 0.1, 0, 0, r);
+        // Ball base — 3D sphere shading
+        const ballGrad = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.05, 0, 0, r);
         ballGrad.addColorStop(0, '#ffffff');
-        ballGrad.addColorStop(0.6, '#f0f0f0');
-        ballGrad.addColorStop(1, '#cccccc');
+        ballGrad.addColorStop(0.4, '#f5f5f5');
+        ballGrad.addColorStop(0.7, '#e0e0e0');
+        ballGrad.addColorStop(1, '#b0b0b0');
         ctx.fillStyle = ballGrad;
         ctx.beginPath();
         ctx.arc(0, 0, r, 0, Math.PI * 2);
@@ -2900,52 +2901,118 @@ class Game {
         ctx.shadowBlur = 0;
         ctx.shadowColor = 'transparent';
         
-        // Black pentagons (darker, slightly smaller for cleaner look)
+        // Clip to ball circle for clean panel edges
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.98, 0, Math.PI * 2);
+        ctx.clip();
+        
+        // Helper: draw a regular polygon (pentagon/hexagon)
+        const drawPoly = (cx, cy, size, sides, rot) => {
+            ctx.beginPath();
+            for (let i = 0; i < sides; i++) {
+                const a = rot + (i * Math.PI * 2 / sides);
+                const px = cx + Math.cos(a) * size;
+                const py = cy + Math.sin(a) * size;
+                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+        };
+        
+        // Center black pentagon
+        const pentSize = r * 0.32;
+        drawPoly(0, 0, pentSize, 5, -Math.PI / 2);
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.lineWidth = r * 0.04;
+        ctx.stroke();
+        
+        // 5 surrounding white hexagons
+        const hexDist = r * 0.62;
+        const hexSize = r * 0.30;
+        ctx.fillStyle = 'rgba(245, 245, 245, 0.6)';
+        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+        ctx.lineWidth = r * 0.035;
+        for (let i = 0; i < 5; i++) {
+            const a = -Math.PI / 2 + (i * Math.PI * 2 / 5);
+            const hx = Math.cos(a) * hexDist;
+            const hy = Math.sin(a) * hexDist;
+            drawPoly(hx, hy, hexSize, 6, Math.PI / 6 + a * 0.15);
+            ctx.fill();
+            ctx.stroke();
+        }
+        
+        // 5 outer black pentagons (between hexagons, near edge)
+        const outerDist = r * 0.92;
+        const outerSize = r * 0.22;
         ctx.fillStyle = '#1a1a2e';
         for (let i = 0; i < 5; i++) {
-            const angle = (i * Math.PI * 2 / 5);
-            const px = Math.cos(angle) * r * 0.55;
-            const py = Math.sin(angle) * r * 0.55;
-            ctx.beginPath();
-            ctx.arc(px, py, r * 0.22, 0, Math.PI * 2);
+            const a = -Math.PI / 2 + ((i + 0.5) * Math.PI * 2 / 5);
+            const ox = Math.cos(a) * outerDist;
+            const oy = Math.sin(a) * outerDist;
+            drawPoly(ox, oy, outerSize, 5, a);
             ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.lineWidth = r * 0.03;
+            ctx.stroke();
         }
-        // Center pentagon
-        ctx.beginPath();
-        ctx.arc(0, 0, r * 0.18, 0, Math.PI * 2);
-        ctx.fill();
         
-        // Panel lines connecting pentagons
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
-        ctx.lineWidth = 0.8;
+        // Seam lines: center pentagon to hexagons
+        ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+        ctx.lineWidth = r * 0.035;
         for (let i = 0; i < 5; i++) {
-            const a1 = (i * Math.PI * 2 / 5);
-            const a2 = ((i + 1) * Math.PI * 2 / 5);
+            const a = -Math.PI / 2 + (i * Math.PI * 2 / 5);
+            const px = Math.cos(a) * pentSize;
+            const py = Math.sin(a) * pentSize;
+            const hx = Math.cos(a) * (hexDist - hexSize);
+            const hy = Math.sin(a) * (hexDist - hexSize);
             ctx.beginPath();
-            ctx.moveTo(Math.cos(a1) * r * 0.55, Math.sin(a1) * r * 0.55);
-            ctx.lineTo(Math.cos(a2) * r * 0.55, Math.sin(a2) * r * 0.55);
-            ctx.stroke();
-            // Line to edge
-            const midA = (a1 + a2) / 2;
-            ctx.beginPath();
-            ctx.moveTo(Math.cos(midA) * r * 0.55, Math.sin(midA) * r * 0.55);
-            ctx.lineTo(Math.cos(midA) * r * 0.92, Math.sin(midA) * r * 0.92);
+            ctx.moveTo(px, py);
+            ctx.lineTo(hx, hy);
             ctx.stroke();
         }
         
-        // Specular highlight
-        const specGrad = ctx.createRadialGradient(-r * 0.3, -r * 0.35, 0, -r * 0.2, -r * 0.25, r * 0.6);
-        specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
-        specGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.15)');
+        // Seam lines: hexagons to outer edge
+        for (let i = 0; i < 5; i++) {
+            const a1 = -Math.PI / 2 + (i * Math.PI * 2 / 5);
+            const a2 = -Math.PI / 2 + ((i + 1) * Math.PI * 2 / 5);
+            const midA = (a1 + a2) / 2;
+            const sx = Math.cos(midA) * (hexDist + hexSize * 0.5);
+            const sy = Math.sin(midA) * (hexDist + hexSize * 0.5);
+            const ex = Math.cos(midA) * r * 1.05;
+            const ey = Math.sin(midA) * r * 1.05;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+        }
+        
+        ctx.restore(); // end clip
+        
+        // Specular highlight — top-left shine
+        const specGrad = ctx.createRadialGradient(-r * 0.3, -r * 0.35, 0, -r * 0.15, -r * 0.2, r * 0.65);
+        specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.75)');
+        specGrad.addColorStop(0.35, 'rgba(255, 255, 255, 0.2)');
         specGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
         ctx.fillStyle = specGrad;
         ctx.beginPath();
         ctx.arc(0, 0, r, 0, Math.PI * 2);
         ctx.fill();
         
-        // Subtle outline
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
-        ctx.lineWidth = 0.8;
+        // Bottom-right shadow for 3D depth
+        const rimGrad = ctx.createRadialGradient(r * 0.2, r * 0.25, r * 0.5, r * 0.1, r * 0.1, r);
+        rimGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        rimGrad.addColorStop(0.7, 'rgba(0, 0, 0, 0)');
+        rimGrad.addColorStop(1, 'rgba(0, 0, 0, 0.15)');
+        ctx.fillStyle = rimGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Crisp outline
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.lineWidth = r * 0.06;
         ctx.beginPath();
         ctx.arc(0, 0, r, 0, Math.PI * 2);
         ctx.stroke();
@@ -3004,10 +3071,12 @@ class Game {
         this.ctx.shadowBlur = 0;
         this.ctx.shadowColor = 'transparent';
         
-        // Flip if facing left
+        // Rotate bug to face sideways (SVGs face up by default)
+        // rotate(π/2) makes head point right; scale(-1,1) flips to face left
         if (player.facing === -1) {
             this.ctx.scale(-1, 1);
         }
+        this.ctx.rotate(Math.PI / 2);
         
         // Draw background cosmetics (accessories like wings) BEFORE player body, in transformed space
         if (player === this.player1 && this.ui.currentProfile && this.ui.currentProfile.equippedCosmetics) {
@@ -3027,7 +3096,7 @@ class Game {
         if (cached) {
             this.ctx.drawImage(cached, -spriteSize / 2, -spriteSize / 2, spriteSize, spriteSize);
         } else {
-            // Fallback: colored circle with eyes
+            // Fallback: colored circle with eyes (positioned for sideways orientation)
             this.ctx.fillStyle = bug.color;
             this.ctx.beginPath();
             this.ctx.arc(0, 0, player.width / 2, 0, Math.PI * 2);
@@ -3035,14 +3104,14 @@ class Game {
             
             this.ctx.fillStyle = 'white';
             this.ctx.beginPath();
-            this.ctx.arc(-player.width * 0.15, -player.height * 0.1, player.width * 0.15, 0, Math.PI * 2);
-            this.ctx.arc(player.width * 0.15, -player.height * 0.1, player.width * 0.15, 0, Math.PI * 2);
+            this.ctx.arc(-player.width * 0.1, -player.height * 0.15, player.width * 0.15, 0, Math.PI * 2);
+            this.ctx.arc(-player.width * 0.1, player.height * 0.15, player.width * 0.15, 0, Math.PI * 2);
             this.ctx.fill();
             
             this.ctx.fillStyle = 'black';
             this.ctx.beginPath();
-            this.ctx.arc(-player.width * 0.15, -player.height * 0.1, player.width * 0.08, 0, Math.PI * 2);
-            this.ctx.arc(player.width * 0.15, -player.height * 0.1, player.width * 0.08, 0, Math.PI * 2);
+            this.ctx.arc(-player.width * 0.1, -player.height * 0.15, player.width * 0.08, 0, Math.PI * 2);
+            this.ctx.arc(-player.width * 0.1, player.height * 0.15, player.width * 0.08, 0, Math.PI * 2);
             this.ctx.fill();
         }
         
@@ -3122,32 +3191,40 @@ class Game {
             drawArenaBackground(this.ctx, this.selectedArena, this.canvas.width, this.canvas.height, this.quality, this.gameMode, this.towerLevel);
             this.drawGoals();
             // Draw players from frame
-            const drawReplayPlayer = (pd, bugId) => {
+            const drawReplayPlayer = (pd, bug, side) => {
                 this.ctx.save();
                 this.ctx.globalAlpha = 0.85;
-                const bug = getBugById(bugId);
-                const color = bug ? bug.color : '#e74c3c';
+                const color = (bug && bug.color) ? bug.color : '#e74c3c';
+                const radius = 25;
+                // Draw body
                 this.ctx.fillStyle = color;
                 this.ctx.beginPath();
-                this.ctx.arc(pd.x, pd.y, 25, 0, Math.PI * 2);
+                this.ctx.arc(pd.x, pd.y, radius, 0, Math.PI * 2);
                 this.ctx.fill();
+                // Draw outline to distinguish players
+                this.ctx.strokeStyle = side === 'left' ? '#00d4ff' : '#ff4444';
+                this.ctx.lineWidth = 3;
+                this.ctx.stroke();
+                // Draw side label
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = 'bold 11px Orbitron, sans-serif';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(side === 'left' ? 'P1' : 'P2', pd.x, pd.y);
                 this.ctx.restore();
             };
-            drawReplayPlayer(f.p1, this.selectedBug1);
-            drawReplayPlayer(f.p2, this.selectedBug2);
-            if (f.p3) drawReplayPlayer(f.p3, this.selectedBug3);
-            // Draw ball from frame
-            this.ctx.save();
-            this.ctx.translate(f.ball.x, f.ball.y);
-            this.ctx.rotate(f.ball.rotation || 0);
-            this.ctx.beginPath();
-            this.ctx.arc(0, 0, this.ball.radius || 15, 0, Math.PI * 2);
-            this.ctx.fillStyle = 'white';
-            this.ctx.fill();
-            this.ctx.strokeStyle = '#333';
-            this.ctx.lineWidth = 2;
-            this.ctx.stroke();
-            this.ctx.restore();
+            drawReplayPlayer(f.p1, this.selectedBug1, 'left');
+            drawReplayPlayer(f.p2, this.selectedBug2, 'right');
+            if (f.p3) drawReplayPlayer(f.p3, this.selectedBug3, 'right');
+            // Draw ball from frame using full ball renderer
+            this.drawBall({
+                x: f.ball.x,
+                y: f.ball.y,
+                rotation: f.ball.rotation || 0,
+                radius: this.ball.radius || 15,
+                vx: f.ball.vx || 0,
+                vy: f.ball.vy || 0
+            });
             // Overlay banner
             this.ctx.save();
             this.ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -3247,48 +3324,6 @@ class Game {
             this.replayPlaying = false;
         });
         
-        // Reset positions after a short delay
-        setTimeout(() => {
-            // Reinitialize balls to match the correct count
-            const ballSizeMultiplier = (this.gameMode === 'arcade' && this.arcadeSettings) ? this.arcadeSettings.ballSize : 1.0;
-            const ballCount = (this.gameMode === 'arcade' && this.arcadeSettings) ? this.arcadeSettings.ballCount || 1 : 1;
-            
-            this.balls = [];
-            for (let i = 0; i < ballCount; i++) {
-                const spacing = this.canvas.width / (ballCount + 1);
-                this.balls.push({
-                    x: spacing * (i + 1),
-                    y: this.canvas.height / 2,
-                    vx: 0,
-                    vy: 0,
-                    radius: 15 * ballSizeMultiplier,
-                    rotation: 0
-                });
-            }
-            this.ball = this.balls[0]; // Update reference
-            
-            // Update AI ball references after reset
-            if (this.player2AI) {
-                this.player2AI.ball = this.ball;
-            }
-            if (this.player2AI_2) {
-                this.player2AI_2.ball = this.ball;
-            }
-            if (this.player1AI) {
-                this.player1AI.ball = this.ball;
-            }
-            if (this.player3AI) {
-                this.player3AI.ball = this.ball;
-            }
-            
-            this.physics.resetPlayer(this.player1, 'left');
-            this.physics.resetPlayer(this.player2, 'right');
-            
-            if (this.player3) {
-                this.physics.resetPlayer(this.player3, 'right', -0.1);
-            }
-        }, 1000);
-        
         // Check if match should end
         const goldenEnd = this.goldenGoalActive && this.score1 !== this.score2;
         if (this.score1 >= this.scoreToWin || this.score2 >= this.scoreToWin || goldenEnd) {
@@ -3298,6 +3333,33 @@ class Game {
         } else {
             // Pause timer and start countdown after goal
             setTimeout(() => {
+                // Reset player positions before countdown renders
+                this.physics.resetPlayer(this.player1, 'left');
+                this.physics.resetPlayer(this.player2, 'right');
+                if (this.player3) {
+                    this.physics.resetPlayer(this.player3, 'right', -0.1);
+                }
+                // Reset ball(s) to center
+                const ballSizeMultiplier = (this.gameMode === 'arcade' && this.arcadeSettings) ? this.arcadeSettings.ballSize : 1.0;
+                const ballCount = (this.gameMode === 'arcade' && this.arcadeSettings) ? this.arcadeSettings.ballCount || 1 : 1;
+                this.balls = [];
+                for (let i = 0; i < ballCount; i++) {
+                    const spacing = this.canvas.width / (ballCount + 1);
+                    this.balls.push({
+                        x: spacing * (i + 1),
+                        y: this.canvas.height / 2,
+                        vx: 0,
+                        vy: 0,
+                        radius: 15 * ballSizeMultiplier,
+                        rotation: 0
+                    });
+                }
+                this.ball = this.balls[0];
+                if (this.player2AI) this.player2AI.ball = this.ball;
+                if (this.player2AI_2) this.player2AI_2.ball = this.ball;
+                if (this.player1AI) this.player1AI.ball = this.ball;
+                if (this.player3AI) this.player3AI.ball = this.ball;
+
                 this.lastFrameTime = null; // Pause timer
                 this.gameState = 'countdown';
                 this.countdownValue = 3;
@@ -4412,26 +4474,24 @@ class Game {
         
         // Draw ball
         if (ps.shotBall) {
-            ctx.save();
-            ctx.fillStyle = 'white';
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(ps.shotBall.x, ps.shotBall.y, ps.shotBall.radius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            ctx.restore();
+            this.drawBall({
+                x: ps.shotBall.x,
+                y: ps.shotBall.y,
+                rotation: 0,
+                radius: ps.shotBall.radius,
+                vx: ps.shotBall.vx || 0,
+                vy: ps.shotBall.vy || 0
+            });
         } else {
             // Ball at shooter's feet
-            ctx.save();
-            ctx.fillStyle = 'white';
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(w / 2 + 20, groundY - 10, 15, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            ctx.restore();
+            this.drawBall({
+                x: w / 2 + 20,
+                y: groundY - 10,
+                rotation: 0,
+                radius: 15,
+                vx: 0,
+                vy: 0
+            });
         }
         
         // Draw aim indicator

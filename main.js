@@ -14,7 +14,6 @@ import { AudioManager } from './audioManager.js';
 import { ParticleSystem } from './particles.js';
 import { AchievementManager } from './achievementManager.js';
 import { QualityManager } from './qualitySettings.js';
-import { AdsManager } from './ads.js';
 
 class Game {
     constructor() {
@@ -130,8 +129,6 @@ class Game {
         // Settings
         this.touchControlsEnabled = this.loadTouchControlsPreference();
         
-    // Ads
-    this.ads = null; // Initialized lazily via ensureAds()
         
         // Controls Editor
         this.controlsEditorActive = false;
@@ -1131,7 +1128,6 @@ class Game {
     startTowerCampaign() {
     this.setGameMode('tower');
     this.matchMode = 'normal';
-    this.ensureAds();
         // towerLevel is now set by either continuing or selecting a specific level
         if (!this.towerLevel) {
             this.towerLevel = this.ui.currentProfile.tower.currentLevel;
@@ -1353,8 +1349,6 @@ class Game {
     
     startQuickPlay() {
         this.setGameMode('quickplay');
-        this.ensureAds();
-        
         // Stop main menu background when entering game
         if (this.mainMenuBackground) {
             this.mainMenuBackground.stop();
@@ -1372,7 +1366,6 @@ class Game {
     
     startMultiplayer() {
         this.setGameMode('multiplayer');
-        this.ensureAds();
         
         // Stop main menu background when entering game
         if (this.mainMenuBackground) {
@@ -2067,6 +2060,11 @@ class Game {
             return;
         }
         
+        // Don't schedule next frame if match ended during this iteration
+        if (this.gameState === 'ended' || this.gameState === 'menu') {
+            this.animationId = null;
+            return;
+        }
         this.animationId = requestAnimationFrame(() => this.gameLoop());
     }
     
@@ -3748,11 +3746,6 @@ class Game {
         
         // Show match end screen
         this.showMatchEnd(playerWon, isDraw);
-        
-        // Attempt to show interstitial ad (cooldown controlled by AdsManager)
-        if (this.ads && this.ads.canShowInterstitial && this.ads.canShowInterstitial()) {
-            this.ads.showInterstitial();
-        }
     }
     
     showMatchEnd(playerWon, isDraw) {
@@ -3822,10 +3815,6 @@ class Game {
             continueBtn.style.display = 'none';
         }
         
-        // Show banner ad during match result (if available)
-        if (this.ads && this.ads.showBanner) {
-            this.ads.showBanner('bottom');
-        }
         this.ui.showOverlay('matchEndScreen');
     }
     
@@ -5054,27 +5043,6 @@ class Game {
             return (window.innerHeight >= window.innerWidth) ? 'portrait' : 'landscape';
         } catch (e) {
             return 'portrait';
-        }
-    }
-
-    ensureAds() {
-        // Lazy initialize AdsManager once a game mode is chosen
-        if (!this.ads) {
-            try {
-                this.ads = new AdsManager({
-                    // Real AdMob unit IDs provided by project owner
-                    appId: 'ca-app-pub-6064374775404365~2828970201',
-                    interstitialId: 'ca-app-pub-6064374775404365/3897960551',
-                    // Placeholders for others (can be updated later)
-                    bannerId: 'WEB_PLACEHOLDER_BANNER',
-                    rewardedId: 'WEB_PLACEHOLDER_REWARDED',
-                    interstitialCooldownSeconds: 120,
-                    debug: true
-                });
-                this.ads.init();
-            } catch (e) {
-                console.warn('Ads init failed:', e);
-            }
         }
     }
 

@@ -3172,7 +3172,7 @@ class Game {
         if (this.replayFrames.length === 0) { onComplete(); return; }
         this.replayPlaying = true;
         this.replayIndex = 0;
-        const framesPerTick = 0.5; // half-speed playback
+        const framesPerTick = 0.75; // slightly slower than real-time for replay effect
         let accumulator = 0;
         const step = () => {
             if (this.replayIndex >= this.replayFrames.length) {
@@ -3317,22 +3317,20 @@ class Game {
         
         this.updateScoreDisplay();
         
-        // Snapshot replay buffer and play instant replay
-        this.replayFrames = this.replayBuffer.slice();
+        // Snapshot replay buffer — keep only last 180 frames (~3 seconds leading to goal)
+        this.replayFrames = this.replayBuffer.slice(-180);
         this.replayBuffer = [];
-        this.playGoalReplay(() => {
-            this.replayPlaying = false;
-        });
         
         // Check if match should end
         const goldenEnd = this.goldenGoalActive && this.score1 !== this.score2;
-        if (this.score1 >= this.scoreToWin || this.score2 >= this.scoreToWin || goldenEnd) {
-            setTimeout(() => {
+        const matchOver = this.score1 >= this.scoreToWin || this.score2 >= this.scoreToWin || goldenEnd;
+        
+        this.playGoalReplay(() => {
+            this.replayPlaying = false;
+            
+            if (matchOver) {
                 this.endMatch();
-            }, 1000);
-        } else {
-            // Pause timer and start countdown after goal
-            setTimeout(() => {
+            } else {
                 // Reset player positions before countdown renders
                 this.physics.resetPlayer(this.player1, 'left');
                 this.physics.resetPlayer(this.player2, 'right');
@@ -3365,8 +3363,8 @@ class Game {
                 this.countdownValue = 3;
                 this.initialCountdownValue = 3;
                 this.countdownStartTime = Date.now();
-            }, 1000);
-        }
+            }
+        });
     }
     
     updateScoreDisplay() {

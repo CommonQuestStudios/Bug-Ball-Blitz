@@ -1,101 +1,103 @@
 # Bug Ball Blitz
 
-A physics-based soccer game starring insect athletes — inspired by classic Slime Soccer.
+**Physics-based soccer with insect athletes — play instantly on any device.**
 
-## Play Now
+<p align="center">
+  <a href="https://aaronc1992.github.io/Bug-Ball-Blitz/">
+    <img src="https://img.shields.io/badge/▶%20PLAY%20NOW-00d4ff?style=for-the-badge&logoColor=white" alt="Play Now" height="50">
+  </a>
+</p>
 
-**[Play in Browser](https://aaronc1992.github.io/Bug-Ball-Blitz/)**
+---
 
-## Game Modes
+## What It Is
 
-**Tower Campaign** — Progress through 20 levels of increasing difficulty. Early levels are 1v1, mid-levels introduce 1v2 battles against two AI opponents, and Level 20 is a boss gauntlet against every bug back-to-back.
+Bug Ball Blitz is a casual sports game where players pick an insect character and compete in fast-paced 2D soccer matches. It runs entirely in the browser — no download, no install, no account required. One tap and you're playing.
 
-**Quick Play** — Pick a bug, an arena, a difficulty (Easy / Medium / Hard / Pro), and jump straight into a match. Customize match length or set a goal target.
+The game blends accessible pick-up-and-play mechanics with deep progression systems that drive long-term retention: a 20-level campaign, unlockable characters, 16 arenas, 24 cosmetic items, 20 goal celebrations, and 17 achievements.
 
-**Local Multiplayer** — Two players on one device. Player 1 uses WASD, Player 2 uses Arrow Keys. On mobile/tablet, dual touch controls appear automatically.
+## Why It Matters
 
-**Arcade Mode** — Tweak everything: gravity, ball size, player size, ball speed, weather effects, number of balls (up to 3). Set up AI-only spectator matches or team modes like 2v1 and 2v2.
+**Instant access** — Runs on any device with a browser. Desktop, tablet, phone. No app store friction. Zero load time.
 
-## Bugs
+**Built for retention** — Tower Campaign progression, achievement-gated unlocks, and cosmetic customization create repeating engagement loops. Players come back to unlock the next bug, beat the next level, or earn the next celebration.
 
-Five playable bugs, each with different stats for speed, jump, power, and size:
+**Multiplayer-ready** — Local multiplayer works today (same device, split controls). The architecture supports extending to online multiplayer.
 
-| Bug | Speed | Jump | Power | Size | Style |
-|-----|-------|------|-------|------|-------|
-| Ladybug | Balanced | Balanced | Balanced | Small | All-rounder starter |
-| Grasshopper | High | Very High | Medium | Medium | Aerial specialist |
-| Beetle | Low | Low | Very High | Large | Power hitter |
-| Ant | Very High | Low | Low | Tiny | Speed demon |
-| Spider | High | High | High | Medium | Agile all-rounder |
+**Monetization surface area** — 24 cosmetic items, 20 celebrations, and 16 arenas form a natural cosmetic store. The game was designed with in-app purchase and ad integration points from the start.
 
-Bugs are unlocked through achievements — winning matches, scoring goals, and completing challenges.
+## Product Overview
 
-## Arenas
+### Game Modes
 
-16 arenas ranging from Grass Field, Dirt Patch, and Leaf Arena (available from the start) to unlockable environments like Desert Oasis, Snowy Park, Volcanic Rock, Mushroom Forest, Beach Sand, Moon Crater, Autumn Leaves, Ice Cave, Garden Pond, Neon City, Candy Land, Jungle Vines, and Crystal Cavern.
+| Mode | Description |
+|------|------------|
+| **Tower Campaign** | 20 progressive levels — 1v1, 1v2, and a final boss gauntlet |
+| **Quick Play** | Instant match with customizable difficulty, bug, and arena |
+| **Local Multiplayer** | Two players on one device (keyboard or dual touch) |
+| **Arcade Mode** | Custom physics, multi-ball, weather effects, AI spectator matches, team modes |
 
-## Customization
+### Content Depth
 
-**Cosmetics** — 24 items across hats (11), glasses (3), and accessories (10). Equip items like Top Hat, Crown, Viking Helmet, Cape, Wings, Lightning Aura, and more.
+| Category | Count | Details |
+|----------|-------|---------|
+| Playable Characters | 5 | Each with unique speed, jump, power, and size stats |
+| Arenas | 16 | Unlockable environments with distinct visual themes |
+| Cosmetic Items | 24 | Hats, glasses, accessories — equipped per character |
+| Goal Celebrations | 20 | Visual effects triggered on scoring (Fireworks, Phoenix, Black Hole, etc.) |
+| Achievements | 17 | Progression milestones that gate new content unlocks |
+| AI Difficulties | 4 | Easy, Medium, Hard, Pro — with coordinated multi-AI in 1v2 modes |
 
-**Celebrations** — 20 goal celebrations including Fireworks, Disco Party, Lightning Strike, Rainbow Wave, Meteor Shower, Aurora Borealis, Galaxy Swirl, Phoenix, Black Hole, and others.
+### Platform Support
 
-**Bug Animations** — Special animations that play on your bug when you score.
+| Platform | Status |
+|----------|--------|
+| Desktop browsers (Chrome, Firefox, Edge, Safari) | Live |
+| Mobile browsers (iOS Safari, Android Chrome) | Live — touch controls auto-detected |
+| Tablet | Live — responsive UI scaling |
 
-## Achievements
+## Technical Architecture
 
-17 achievements tracking goals, wins, perfect games, and milestones. Achievements unlock new bugs, arenas, and cosmetics.
+Built with **zero dependencies** — vanilla JavaScript (ES6 modules), HTML5 Canvas 2D, and CSS. No frameworks, no build tools, no server required. The entire game is static files that deploy anywhere.
 
-## Controls
+| System | Implementation |
+|--------|---------------|
+| Rendering | HTML5 Canvas with 3D-shaded ball (truncated icosahedron geometry) |
+| Physics | Fixed-timestep simulation with accumulator — gravity, collisions, momentum |
+| AI | 4-tier difficulty system with multi-agent coordination for 1v2 modes |
+| Replay | Instant replay captures the last 3 seconds before every goal |
+| Persistence | localStorage-based save system with multi-profile support |
+| Responsive | Auto-detects device type — adapts controls, layout, and UI scaling |
+| Performance | Configurable quality presets for lower-end hardware |
+| Weather | Dynamic rain, snow, and wind systems that affect ball physics |
 
-**Keyboard** — Player 1: A/D to move, W or Space to jump. Player 2: Arrow Keys to move, Up Arrow to jump.
+### Why Zero Dependencies Matters
 
-**Touch** — Virtual joystick and jump button appear automatically on mobile devices.
+- **No supply chain risk** — nothing to audit, nothing to break
+- **Instant deployment** — push static files to any CDN or hosting provider
+- **Tiny footprint** — the entire game is a handful of JS files
+- **Full control** — every system is purpose-built and optimizable
 
-## How to Run Locally
+## Growth Opportunities
 
-Open the project folder in VS Code and use the Live Server extension, or just open `index.html` directly in a browser. No build step or dependencies required.
+**Online multiplayer** — The game loop and physics are deterministic. Adding netcode for real-time online matches is a natural next step that would significantly expand the addressable audience.
 
-```bash
-# Or use a local server
-python -m http.server 8000
-# Open http://localhost:8000
-```
+**Mobile app distribution** — The codebase wraps cleanly into native apps via Capacitor/Cordova for App Store and Google Play distribution, opening up push notifications, in-app purchases, and broader discovery.
 
-## Project Structure
+**Cosmetic store** — The existing 24 cosmetics, 20 celebrations, and 16 arenas are structured for monetization. Adding a soft currency and storefront is a UI layer on top of systems that already exist.
 
-```
-index.html           — Game page
-style.css            — Styling and responsive layout
-main.js              — Core game engine, rendering, state management
-physics.js           — Physics simulation (gravity, collisions, ball movement)
-ai.js                — AI opponents (4 difficulty levels, multi-AI teamwork)
-bugs.js              — Bug definitions with inline SVG art and stats
-arenas.js            — Arena backgrounds and rendering
-ui.js                — Menu system and screen management
-saveSystem.js        — Profile persistence via localStorage
-audioManager.js      — Sound effects and haptic feedback
-achievementManager.js — Achievement tracking and unlock logic
-particles.js         — Particle effects (kick dust, sparks, trails)
-celebrations.js      — Goal celebration animations
-bugAnimations.js     — Scored-goal bug animations
-cosmetics.js         — Cosmetic items and hitbox modifiers
-menuBackground.js    — Animated AI match on the menu screen
-qualitySettings.js   — Graphics quality presets
-```
+**Seasonal content** — The arena and cosmetic systems are modular. New themed content (holiday events, limited-time arenas, seasonal celebrations) can be shipped without touching core game code.
 
-## Technical Details
+**Competitive/social features** — Leaderboards, tournaments, replays sharing, and friend challenges would deepen engagement for the competitive segment.
 
-Built with vanilla JavaScript (ES6 modules), HTML5 Canvas for rendering, and CSS for UI. No frameworks or external dependencies. All artwork is inline SVG. Game state persists via localStorage with support for multiple player profiles.
+## Contact
 
-Key systems:
-- Fixed-timestep physics loop with accumulator
-- 3D-shaded soccer ball with truncated icosahedron geometry
-- Instant replay system (records last 3 seconds before each goal)
-- Responsive design across desktop, tablet, and mobile
-- Weather effects (rain, snow, wind) that affect ball physics
-- Quality settings for performance tuning on lower-end devices
+Built by **Aaron C.** — [GitHub Profile](https://github.com/AaronC1992)
 
-## License
+---
 
-Portfolio project — feel free to use, modify, and learn from the code.
+<p align="center">
+  <a href="https://aaronc1992.github.io/Bug-Ball-Blitz/">
+    <img src="https://img.shields.io/badge/▶%20PLAY%20NOW-00d4ff?style=for-the-badge&logoColor=white" alt="Play Now" height="40">
+  </a>
+</p>

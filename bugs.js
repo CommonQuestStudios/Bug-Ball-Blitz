@@ -5,8 +5,8 @@ export const BUGS = {
         id: 'ladybug',
         name: 'Ladybug',
         stats: {
-            speed: 0.75,
-            jump: 0.75,
+            speed: 0.78,
+            jump: 0.8,
             power: 0.75,
             size: 0.8
         },
@@ -79,8 +79,8 @@ export const BUGS = {
         id: 'grasshopper',
         name: 'Grasshopper',
         stats: {
-            speed: 0.8,
-            jump: 1.2,
+            speed: 0.82,
+            jump: 1.15,
             power: 0.7,
             size: 0.9
         },
@@ -139,8 +139,8 @@ export const BUGS = {
         id: 'stagBeetle',
         name: 'Beetle',
         stats: {
-            speed: 0.6,
-            jump: 0.7,
+            speed: 0.62,
+            jump: 0.68,
             power: 1.0,
             size: 1.2
         },
@@ -207,8 +207,8 @@ export const BUGS = {
         id: 'ant',
         name: 'Ant',
         stats: {
-            speed: 1.0,
-            jump: 0.65,
+            speed: 1.05,
+            jump: 0.7,
             power: 0.5,
             size: 0.6
         },
@@ -265,8 +265,8 @@ export const BUGS = {
         id: 'spider',
         name: 'Spider',
         stats: {
-            speed: 0.85,
-            jump: 0.8,
+            speed: 0.88,
+            jump: 0.85,
             power: 0.8,
             size: 1.0
         },

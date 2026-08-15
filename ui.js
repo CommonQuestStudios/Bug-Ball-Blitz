@@ -936,7 +936,7 @@ export class UIManager {
         this.showScreen('arenaSelectScreen');
     }
     
-     drawArenaPreview(ctx, arena, width, height) {
+    drawArenaPreview(ctx, arena, width, height) {
         drawArenaBackground(ctx, arena, width, height);
     }
     

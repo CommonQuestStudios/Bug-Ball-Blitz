@@ -531,7 +531,7 @@ function drawDistantScenery(ctx, arena, width, height, groundY, showWeather) {
             const t = Date.now() * 0.0015;
             const waveY = groundY - 10;
             ctx.fillStyle = '#1E90FF';
-            ctx.fillRect(0, waveY, width, groundY - waveY);
+            ctx.fillRect(0, waveY, width, height - waveY);
 
             ctx.fillStyle = '#E0F6FF';
             ctx.beginPath();
@@ -563,8 +563,10 @@ function drawDistantScenery(ctx, arena, width, height, groundY, showWeather) {
             ctx.beginPath();
             ctx.ellipse(width * 0.75, height * 0.25, 45, 12, Math.PI * 0.25, 0, Math.PI * 2);
             ctx.fill();
-            ctx.restore();
-            ctx.save();
+            
+            // Reset shadow properties explicitly
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
 
             ctx.fillStyle = '#505050';
             ctx.beginPath();
@@ -622,7 +624,7 @@ function drawDistantScenery(ctx, arena, width, height, groundY, showWeather) {
             break;
         }
         case 'neonCity': {
-            ctx.fillStyle = '#12121c';
+            ctx.save();
             const bWidths = [60, 80, 50, 90, 70];
             const bHeights = [180, 220, 140, 260, 170];
             const bPositions = [width * 0.05, width * 0.22, width * 0.4, width * 0.58, width * 0.8];
@@ -632,6 +634,7 @@ function drawDistantScenery(ctx, arena, width, height, groundY, showWeather) {
                 const bw = bWidths[i];
                 const bh = bHeights[i];
 
+                ctx.fillStyle = '#12121c';
                 ctx.fillRect(bx, groundY - bh, bw, bh);
 
                 ctx.fillStyle = i % 2 === 0 ? '#FF00FF' : '#00FFFF';
@@ -643,6 +646,7 @@ function drawDistantScenery(ctx, arena, width, height, groundY, showWeather) {
                     }
                 }
             }
+            ctx.restore();
             break;
         }
         case 'candyLand': {
@@ -817,6 +821,7 @@ function drawGroundDetails(ctx, arena, width, height, groundY, groundHeight, sho
         case 'volcanicRock': {
             ctx.strokeStyle = '#FF4500';
             ctx.shadowColor = '#FF0000';
+            ctx.shadowBlur = 8;
             ctx.lineWidth = 1.8;
             ctx.beginPath();
             for (let i = 0; i < 4; i++) {
@@ -1019,14 +1024,14 @@ function drawForegroundScenery(ctx, arena, width, height, groundY, showWeather) 
         }
         case 'iceCave': {
             ctx.fillStyle = 'rgba(175, 238, 238, 0.4)';
-            ctx.beginPath();
             for (let px = 0; px < width; px += 40) {
+                ctx.beginPath();
                 ctx.moveTo(px, 0);
                 ctx.lineTo(px + 20, 15 + (px % 3) * 10);
                 ctx.lineTo(px + 40, 0);
+                ctx.closePath();
+                ctx.fill();
             }
-            ctx.closePath();
-            ctx.fill();
             break;
         }
         case 'leafArena': {

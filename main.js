@@ -105,7 +105,7 @@ class Game {
         // Goal celebration
         this.celebrationActive = false;
         this.celebrationFrame = 0;
-        this.celebrationDuration = 60; // 1 second at 60fps
+        this.celebrationDuration = 120; // 2 seconds at 60fps
         this.celebrationSide = null;
         this.celebrationType = 'classic';
         this.bugAnimationType = 'none';

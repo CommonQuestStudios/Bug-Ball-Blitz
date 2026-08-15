@@ -27,7 +27,8 @@ const filesToCopy = [
     'menuBackground.js',
     'qualitySettings.js',
     'ads.js',
-    'CHEATS.js'
+    'CHEATS.js',
+    'constants.js'
 ];
 
 // Copy each file
@@ -44,36 +45,39 @@ filesToCopy.forEach(file => {
     }
 });
 
-// Copy Assets directory if it exists
-const assetsDir = path.join(__dirname, 'Assets');
-const destAssetsDir = path.join(wwwDir, 'Assets');
+// Copy Assets or assets directory if either exists
+const possibleAssetsDirs = ['Assets', 'assets'];
+possibleAssetsDirs.forEach(dirName => {
+    const assetsDir = path.join(__dirname, dirName);
+    const destAssetsDir = path.join(wwwDir, dirName);
 
-if (fs.existsSync(assetsDir)) {
-    // Create Assets directory in www
-    if (!fs.existsSync(destAssetsDir)) {
-        fs.mkdirSync(destAssetsDir, { recursive: true });
-    }
-    
-    // Copy all files from Assets (recursive)
-    const copyRecursive = (src, dest) => {
-        const entries = fs.readdirSync(src, { withFileTypes: true });
-        entries.forEach(entry => {
-            const srcPath = path.join(src, entry.name);
-            const destPath = path.join(dest, entry.name);
-            
-            if (entry.isDirectory()) {
-                if (!fs.existsSync(destPath)) {
-                    fs.mkdirSync(destPath, { recursive: true });
+    if (fs.existsSync(assetsDir)) {
+        // Create directory in www
+        if (!fs.existsSync(destAssetsDir)) {
+            fs.mkdirSync(destAssetsDir, { recursive: true });
+        }
+        
+        // Copy all files (recursive)
+        const copyRecursive = (src, dest) => {
+            const entries = fs.readdirSync(src, { withFileTypes: true });
+            entries.forEach(entry => {
+                const srcPath = path.join(src, entry.name);
+                const destPath = path.join(dest, entry.name);
+                
+                if (entry.isDirectory()) {
+                    if (!fs.existsSync(destPath)) {
+                        fs.mkdirSync(destPath, { recursive: true });
+                    }
+                    copyRecursive(srcPath, destPath);
+                } else {
+                    fs.copyFileSync(srcPath, destPath);
                 }
-                copyRecursive(srcPath, destPath);
-            } else {
-                fs.copyFileSync(srcPath, destPath);
-            }
-        });
-    };
-    
-    copyRecursive(assetsDir, destAssetsDir);
-    console.log('✓ Copied Assets directory');
-}
+            });
+        };
+        
+        copyRecursive(assetsDir, destAssetsDir);
+        console.log(`✓ Copied ${dirName} directory`);
+    }
+});
 
 console.log('\n✓ Build complete! Files ready in www/ directory');

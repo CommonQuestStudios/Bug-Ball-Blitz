@@ -3588,8 +3588,8 @@ class Game {
             
             if (this.currentWeather === 'rain') {
                 // Rain adds horizontal drift (changes direction every 5 seconds)
-                ball.vx += 0.2 * this.weatherDirection;
-                ball.vy += 0.08; // Slight downward push
+                ball.vx += 0.08 * this.weatherDirection;
+                ball.vy += 0.03; // Slight downward push
             } else if (this.currentWeather === 'snow') {
                 // Snow reduces friction, making ball slide more
                 ball.vx *= 1.008; // Less friction slowdown for ball
@@ -3610,7 +3610,7 @@ class Game {
                 }
             } else if (this.currentWeather === 'wind') {
                 // Wind pushes ball horizontally - REDUCED STRENGTH
-                ball.vx += 0.08 * this.weatherDirection; // Reduced from 0.2
+                ball.vx += 0.04 * this.weatherDirection; // Reduced from 0.08
             }
         }
         

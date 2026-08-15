@@ -1,7 +1,7 @@
 // ui.js - UI rendering and menu management
 
 import { getBugArray, isBugUnlocked } from './bugs.js';
-import { getArenaArray, isArenaUnlocked } from './arenas.js';
+import { getArenaArray, isArenaUnlocked, drawArenaBackground } from './arenas.js';
 import { SaveSystem } from './saveSystem.js';
 
 export class UIManager {
@@ -937,16 +937,7 @@ export class UIManager {
     }
     
     drawArenaPreview(ctx, arena, width, height) {
-        // Sky
-        const skyGradient = ctx.createLinearGradient(0, 0, 0, height);
-        skyGradient.addColorStop(0, arena.skyColors[0]);
-        skyGradient.addColorStop(1, arena.skyColors[1]);
-        ctx.fillStyle = skyGradient;
-        ctx.fillRect(0, 0, width, height);
-        
-        // Ground
-        ctx.fillStyle = arena.groundColor;
-        ctx.fillRect(0, height * 0.6, width, height * 0.4);
+        drawArenaBackground(ctx, arena, width, height);
     }
     
     showArenaPreviewModal(arena, isUnlocked, callback) {
@@ -1081,82 +1072,7 @@ export class UIManager {
     }
     
     drawDetailedArenaPreview(ctx, arena, width, height) {
-        // Sky with gradient
-        const skyGradient = ctx.createLinearGradient(0, 0, 0, height * 0.6);
-        skyGradient.addColorStop(0, arena.skyColors[0]);
-        skyGradient.addColorStop(1, arena.skyColors[1]);
-        ctx.fillStyle = skyGradient;
-        ctx.fillRect(0, 0, width, height);
-        
-        // Ground with gradient
-        const groundGradient = ctx.createLinearGradient(0, height * 0.6, 0, height);
-        const baseColor = arena.groundColor;
-        groundGradient.addColorStop(0, baseColor);
-        groundGradient.addColorStop(1, this.darkenColor(baseColor, 0.3));
-        ctx.fillStyle = groundGradient;
-        ctx.fillRect(0, height * 0.6, width, height * 0.4);
-        
-        // Draw field markings
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.lineWidth = 3;
-        
-        // Center line
-        ctx.beginPath();
-        ctx.moveTo(width / 2, height * 0.6);
-        ctx.lineTo(width / 2, height);
-        ctx.stroke();
-        
-        // Center circle
-        ctx.beginPath();
-        ctx.arc(width / 2, height * 0.8, 40, 0, Math.PI * 2);
-        ctx.stroke();
-        
-        // Goal areas
-        const goalWidth = 80;
-        const goalHeight = 60;
-        
-        // Left goal
-        ctx.strokeRect(10, height * 0.7, goalWidth, goalHeight);
-        
-        // Right goal
-        ctx.strokeRect(width - 10 - goalWidth, height * 0.7, goalWidth, goalHeight);
-        
-        // Add grass blades if applicable
-        if (arena.grassBlades) {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-            ctx.lineWidth = 1;
-            for (let i = 0; i < 50; i++) {
-                const x = Math.random() * width;
-                const y = height * 0.6 + Math.random() * height * 0.4;
-                ctx.beginPath();
-                ctx.moveTo(x, y);
-                ctx.lineTo(x + Math.random() * 4 - 2, y - 5);
-                ctx.stroke();
-            }
-        }
-        
-        // Weather effects
-        if (arena.weather === 'snowy') {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            for (let i = 0; i < 30; i++) {
-                const x = Math.random() * width;
-                const y = Math.random() * height;
-                const size = Math.random() * 3 + 1;
-                ctx.beginPath();
-                ctx.arc(x, y, size, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        } else if (arena.weather === 'dusty') {
-            ctx.fillStyle = 'rgba(139, 105, 20, 0.2)';
-            for (let i = 0; i < 20; i++) {
-                const x = Math.random() * width;
-                const y = Math.random() * height;
-                const size = Math.random() * 5 + 2;
-                ctx.beginPath();
-                ctx.arc(x, y, size, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
+        drawArenaBackground(ctx, arena, width, height);
     }
     
     darkenColor(color, amount) {

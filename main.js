@@ -2104,6 +2104,8 @@ class Game {
                 // Start the match
                 this.gameState = 'playing';
                 this.lastFrameTime = performance.now();
+                this._accumulator = 0;     // Prevent intro time from simulating all at once
+                this._lastLoopTime = null; // Fresh delta on first playing frame
             }
         }
     }

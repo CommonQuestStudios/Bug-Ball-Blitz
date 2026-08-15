@@ -47,7 +47,9 @@ filesToCopy.forEach(file => {
 
 // Copy Assets or assets directory if either exists
 const possibleAssetsDirs = ['Assets', 'assets'];
-possibleAssetsDirs.forEach(dirName => {
+let copiedAssets = false;
+for (const dirName of possibleAssetsDirs) {
+    if (copiedAssets) break;
     const assetsDir = path.join(__dirname, dirName);
     const destAssetsDir = path.join(wwwDir, dirName);
 
@@ -77,7 +79,8 @@ possibleAssetsDirs.forEach(dirName => {
         
         copyRecursive(assetsDir, destAssetsDir);
         console.log(`✓ Copied ${dirName} directory`);
+        copiedAssets = true;
     }
-});
+}
 
 console.log('\n✓ Build complete! Files ready in www/ directory');

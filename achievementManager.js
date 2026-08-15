@@ -2,6 +2,7 @@
 // Tracks player achievements and unlocks
 
 import { SaveSystem } from './saveSystem.js';
+import { getArenaArray } from './arenas.js';
 
 export class AchievementManager {
     constructor(profile = null) {
@@ -283,6 +284,7 @@ export class AchievementManager {
 
     checkAchievements(changedStat = null) {
         const newlyUnlocked = [];
+        const totalArenaCount = getArenaArray().length || 1;
 
         Object.values(this.achievements).forEach(achievement => {
             // Skip if already unlocked
@@ -296,8 +298,7 @@ export class AchievementManager {
             
             if (achievement.stat === 'allArenas') {
                 currentValue = this.stats.visitedArenas ? this.stats.visitedArenas.size : 0;
-                // You'll need to set this number based on your total arenas
-                if (currentValue >= 8) { // Assuming 8 total arenas
+                if (currentValue >= totalArenaCount) {
                     achievement.unlocked = true;
                     newlyUnlocked.push(achievement);
                 }
@@ -462,6 +463,12 @@ export class AchievementManager {
         if (!achievement) return 0;
 
         if (achievement.unlocked) return 100;
+
+        if (achievement.stat === 'allArenas') {
+            const current = this.stats.visitedArenas ? this.stats.visitedArenas.size : 0;
+            const required = getArenaArray().length || 1;
+            return Math.min(100, (current / required) * 100);
+        }
 
         const current = this.stats[achievement.stat] || 0;
         return Math.min(100, (current / achievement.requirement) * 100);

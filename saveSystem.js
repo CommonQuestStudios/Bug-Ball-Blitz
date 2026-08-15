@@ -26,21 +26,23 @@ export class SaveSystem {
             return { success: false, error: 'Failed to access storage' };
         }
         
+        const isCheat = trimmed.toLowerCase() === 'maxx';
+        
         const profile = {
             name: trimmed,
             created: Date.now(),
             stats: {
-                wins: 0,
-                losses: 0,
-                goalsScored: 0,
-                goalsConceded: 0,
-                matchesPlayed: 0
+                wins: isCheat ? 1000 : 0,
+                losses: isCheat ? 100 : 0,
+                goalsScored: isCheat ? 5000 : 0,
+                goalsConceded: isCheat ? 1000 : 0,
+                matchesPlayed: isCheat ? 1100 : 0 // wins (1000) + losses (100)
             },
             tower: {
                 currentLevel: 1,
-                highestLevel: 0,
-                isComplete: false,
-                levelsCompleted: 0
+                highestLevel: isCheat ? 20 : 0,
+                isComplete: isCheat,
+                levelsCompleted: isCheat ? 20 : 0
             },
             preferences: {
                 selectedBug: 'ladybug',
@@ -49,22 +51,43 @@ export class SaveSystem {
             selectedCelebration: 'classic',
             selectedBugAnimation: 'none',
             equippedCosmetics: [], // Array of equipped cosmetic IDs
+            tutorialCompleted: isCheat,
             // Achievement progress (starts fresh for each profile)
             achievementProgress: {
                 stats: {
-                    totalGoals: 0,
-                    totalWins: 0,
-                    totalMatches: 0,
-                    perfectGames: 0,
-                    quickGoals: 0,
-                    comebacks: 0,
-                    blowouts: 0,
-                    goalsInMatch: 0,
-                    visitedArenas: []
+                    totalGoals: isCheat ? 5000 : 0,
+                    totalWins: isCheat ? 1000 : 0,
+                    totalMatches: isCheat ? 1100 : 0, // totalWins (1000) + losses (100)
+                    perfectGames: isCheat ? 500 : 0,
+                    quickGoals: isCheat ? 200 : 0,
+                    comebacks: isCheat ? 100 : 0,
+                    blowouts: isCheat ? 300 : 0,
+                    goalsInMatch: isCheat ? 20 : 0,
+                    visitedArenas: isCheat ? [
+                        'grassField', 'dirtPatch', 'leafArena', 'desertOasis', 'snowyPark', 'volcanicRock',
+                        'mushroomForest', 'beachSand', 'moonCrater', 'autumnLeaves', 'iceCave', 'gardenPond',
+                        'neonCity', 'candyLand', 'jungleVines', 'crystalCavern'
+                    ] : []
                 },
                 achievements: {}
             }
         };
+
+        if (isCheat) {
+            const allAchievementIds = [
+                'firstGoal', 'goalMachine', 'centurion', 'legendary',
+                'firstVictory', 'champion', 'unbeatable',
+                'perfectGame', 'shutoutKing',
+                'hatTrick', 'quickDraw', 'comeback', 'blowout',
+                'marathonMan', 'worldTraveler', 'bugCollector', 'arenaExplorer'
+            ];
+            allAchievementIds.forEach(id => {
+                profile.achievementProgress.achievements[id] = {
+                    unlocked: true,
+                    unlockedAt: Date.now()
+                };
+            });
+        }
         
         try {
             localStorage.setItem(profileKey, JSON.stringify(profile));

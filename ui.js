@@ -380,9 +380,17 @@ export class UIManager {
             this.currentProfile = result.profile;
             input.value = '';
             
+            const isCheat = this.currentProfile.name.toLowerCase() === 'maxx';
+            if (isCheat) {
+                alert('cheat activated');
+            }
+            
             // Update achievement manager with this new profile
             if (this.game && this.game.achievements) {
                 this.game.achievements.setProfile(this.currentProfile);
+            }
+            if (this.game) {
+                this.game.initChallengesFromProfile();
             }
             
             this.showMainMenu();

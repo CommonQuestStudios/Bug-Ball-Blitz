@@ -4619,8 +4619,12 @@ class Game {
                 
                 // Calculate progress
                 const progress = this.achievements.getProgress(achievement.id);
-                const current = this.achievements.stats[achievement.stat] || 0;
-                const required = achievement.requirement;
+                const current = achievement.stat === 'allArenas'
+                    ? (this.achievements.stats.visitedArenas ? this.achievements.stats.visitedArenas.size : 0)
+                    : (this.achievements.stats[achievement.stat] || 0);
+                const required = achievement.stat === 'allArenas'
+                    ? getArenaArray().length
+                    : achievement.requirement;
                 
                 card.innerHTML = `
                     <div class="achievement-header">

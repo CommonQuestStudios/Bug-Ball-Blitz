@@ -733,8 +733,78 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
     }
     
     if (cosmetic.id === 'lightning') {
-        // Lightning sparking across the bug's body
-        ctx.globalAlpha = 0.85;
+        // Lightning sparking across the bug's body (toned down from 0.85)
+        ctx.globalAlpha = 0.45;
+        
+        // Track lightning trails
+        if (player) {
+            // Initialize lightning trails array if not exists
+            if (!player.lightningTrails) {
+                player.lightningTrails = [];
+            }
+            
+            // Add new lightning trail at player's current position every few frames
+            if (frame % 3 === 0) {
+                player.lightningTrails.push({
+                    x: player.x,
+                    y: player.y,
+                    startTime: Date.now(),
+                    width: width * 0.25
+                });
+            }
+            
+            // Draw and update lightning trails
+            const now = Date.now();
+            player.lightningTrails = player.lightningTrails.filter(trail => {
+                const age = (now - trail.startTime) / 1000; // Age in seconds
+                if (age > 1) return false; // Remove trails older than 1 second
+                
+                // Draw trail with fading intensity
+                const intensity = 1 - age;
+                ctx.globalAlpha = intensity * 0.45;
+                
+                // Calculate position relative to transformed player space
+                const facing = player.facing || 1;
+                const localX = (trail.y - player.y) * facing;
+                const localY = -(trail.x - player.x);
+                
+                // Draw trailing lightning core
+                const trailGradient = ctx.createRadialGradient(
+                    localX, localY, 0,
+                    localX, localY, trail.width
+                );
+                trailGradient.addColorStop(0, 'rgba(255, 255, 255, 0.7)'); // White center
+                trailGradient.addColorStop(0.4, 'rgba(0, 191, 255, 0.4)'); // Blue glow
+                trailGradient.addColorStop(1, 'rgba(0, 0, 255, 0)'); // Fading edge
+                
+                ctx.fillStyle = trailGradient;
+                ctx.shadowColor = '#00BFFF';
+                ctx.shadowBlur = 10;
+                
+                ctx.beginPath();
+                ctx.arc(localX, localY, trail.width, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Occasionally draw small random sparks inside the trail to make it look like a lightning trail!
+                if (Math.random() < 0.3) {
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = 1;
+                    ctx.shadowBlur = 5;
+                    ctx.beginPath();
+                    const sparkOffset = trail.width * 0.6;
+                    const sx = localX + (Math.random() - 0.5) * sparkOffset;
+                    const sy = localY + (Math.random() - 0.5) * sparkOffset;
+                    ctx.moveTo(sx, sy);
+                    ctx.lineTo(sx + (Math.random() - 0.5) * sparkOffset, sy + (Math.random() - 0.5) * sparkOffset);
+                    ctx.stroke();
+                }
+                
+                return true;
+            });
+        }
+        
+        // Restore lightning body aura alpha
+        ctx.globalAlpha = 0.45;
         
         // Create multiple small lightning arcs across the body
         const numArcs = 8;
@@ -751,10 +821,10 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
             const endY = y + Math.sin(angle2) * radius2;
             
             // Draw arc with jagged path
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1.5;
             ctx.strokeStyle = '#FFFFFF';
             ctx.shadowColor = '#00BFFF';
-            ctx.shadowBlur = 15;
+            ctx.shadowBlur = 12;
             
             ctx.beginPath();
             ctx.moveTo(startX, startY);
@@ -779,10 +849,10 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
             const sparkY = y + Math.sin(sparkAngle) * height * 0.5;
             
             ctx.shadowColor = '#FFFFFF';
-            ctx.shadowBlur = 25;
+            ctx.shadowBlur = 20;
             ctx.fillStyle = '#FFFFFF';
             ctx.beginPath();
-            ctx.arc(sparkX, sparkY, 3, 0, Math.PI * 2);
+            ctx.arc(sparkX, sparkY, 2.5, 0, Math.PI * 2);
             ctx.fill();
         }
         
@@ -797,17 +867,19 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
                 if (distance < shockDistance && distance > width) {
+                    const facing = player.facing || 1;
+                    const ballLocalX = (gameContext.ball.y - player.y) * facing;
+                    const ballLocalY = -(gameContext.ball.x - player.x);
+                    
                     // Draw lightning arc to ball
-                    const angle = Math.atan2(dy, dx);
+                    const angle = Math.atan2(ballLocalY, ballLocalX);
                     const startX = x + Math.cos(angle) * width * 0.5;
                     const startY = y + Math.sin(angle) * height * 0.5;
-                    const ballRelativeX = gameContext.ball.x - player.x;
-                    const ballRelativeY = gameContext.ball.y - player.y;
                     
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = 1.5;
                     ctx.strokeStyle = '#FFFFFF';
                     ctx.shadowColor = '#00BFFF';
-                    ctx.shadowBlur = 20;
+                    ctx.shadowBlur = 15;
                     
                     ctx.beginPath();
                     ctx.moveTo(startX, startY);
@@ -816,10 +888,10 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                     const segments = 5;
                     for (let j = 1; j <= segments; j++) {
                         const t = j / segments;
-                        const midX = startX + ballRelativeX * t;
-                        const midY = startY + ballRelativeY * t;
-                        const offsetX = (Math.random() - 0.5) * width * 0.3;
-                        const offsetY = (Math.random() - 0.5) * height * 0.3;
+                        const midX = startX + (ballLocalX - startX) * t;
+                        const midY = startY + (ballLocalY - startY) * t;
+                        const offsetX = (Math.random() - 0.5) * width * 0.2;
+                        const offsetY = (Math.random() - 0.5) * height * 0.2;
                         ctx.lineTo(midX + offsetX, midY + offsetY);
                     }
                     ctx.stroke();
@@ -836,17 +908,19 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     
                     if (distance < shockDistance && distance > width) {
+                        const facing = player.facing || 1;
+                        const targetLocalX = (otherPlayer.y - player.y) * facing;
+                        const targetLocalY = -(otherPlayer.x - player.x);
+                        
                         // Draw lightning arc to other player
-                        const angle = Math.atan2(dy, dx);
+                        const angle = Math.atan2(targetLocalY, targetLocalX);
                         const startX = x + Math.cos(angle) * width * 0.5;
                         const startY = y + Math.sin(angle) * height * 0.5;
-                        const targetRelativeX = otherPlayer.x - player.x;
-                        const targetRelativeY = otherPlayer.y - player.y;
                         
-                        ctx.lineWidth = 2;
+                        ctx.lineWidth = 1.5;
                         ctx.strokeStyle = '#FFFFFF';
                         ctx.shadowColor = '#00BFFF';
-                        ctx.shadowBlur = 20;
+                        ctx.shadowBlur = 15;
                         
                         ctx.beginPath();
                         ctx.moveTo(startX, startY);
@@ -855,10 +929,10 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                         const segments = 5;
                         for (let j = 1; j <= segments; j++) {
                             const t = j / segments;
-                            const midX = startX + targetRelativeX * t;
-                            const midY = startY + targetRelativeY * t;
-                            const offsetX = (Math.random() - 0.5) * width * 0.3;
-                            const offsetY = (Math.random() - 0.5) * height * 0.3;
+                            const midX = startX + (targetLocalX - startX) * t;
+                            const midY = startY + (targetLocalY - startY) * t;
+                            const offsetX = (Math.random() - 0.5) * width * 0.2;
+                            const offsetY = (Math.random() - 0.5) * height * 0.2;
                             ctx.lineTo(midX + offsetX, midY + offsetY);
                         }
                         ctx.stroke();
@@ -872,8 +946,8 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
     }
     
     if (cosmetic.id === 'fire') {
-        // Make the bug look like it's on fire
-        ctx.globalAlpha = 0.85;
+        // Make the bug look like it's on fire (toned down from 0.85)
+        ctx.globalAlpha = 0.45;
         
         // Draw multiple layers of flames covering the bug's body
         const numFlameLayers = 12;
@@ -890,20 +964,20 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
             const flameWidth = width * (0.25 + Math.random() * 0.1);
             const flameHeight = width * (0.6 + Math.random() * 0.3 + flicker);
             
-            // Create flame gradient
+            // Create flame gradient (toned down)
             const gradient = ctx.createRadialGradient(
                 flameX, flameY, 0,
                 flameX, flameY - flameHeight * 0.3, flameHeight
             );
-            gradient.addColorStop(0, 'rgba(255, 255, 200, 0.9)'); // White hot center
-            gradient.addColorStop(0.2, 'rgba(255, 220, 0, 0.8)'); // Bright yellow
-            gradient.addColorStop(0.5, 'rgba(255, 140, 0, 0.7)'); // Orange
-            gradient.addColorStop(0.8, 'rgba(255, 60, 0, 0.4)'); // Red-orange
+            gradient.addColorStop(0, 'rgba(255, 255, 200, 0.55)'); // White hot center
+            gradient.addColorStop(0.2, 'rgba(255, 220, 0, 0.45)'); // Bright yellow
+            gradient.addColorStop(0.5, 'rgba(255, 140, 0, 0.35)'); // Orange
+            gradient.addColorStop(0.8, 'rgba(255, 60, 0, 0.2)'); // Red-orange
             gradient.addColorStop(1, 'rgba(100, 0, 0, 0)'); // Dark red fading
             
             ctx.fillStyle = gradient;
             ctx.shadowColor = '#FF6600';
-            ctx.shadowBlur = 25;
+            ctx.shadowBlur = 15;
             
             // Draw flame as irregular shape
             ctx.beginPath();
@@ -911,114 +985,123 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
             ctx.fill();
         }
         
-        // Add bright core glow at bug center
+        // Add subtle core glow at bug center
         const coreGradient = ctx.createRadialGradient(x, y, 0, x, y, width * 0.5);
-        coreGradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
-        coreGradient.addColorStop(0.4, 'rgba(255, 200, 0, 0.4)');
+        coreGradient.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+        coreGradient.addColorStop(0.4, 'rgba(255, 200, 0, 0.15)');
         coreGradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
         
         ctx.fillStyle = coreGradient;
-        ctx.shadowBlur = 30;
+        ctx.shadowBlur = 15;
         ctx.beginPath();
         ctx.arc(x, y, width * 0.5, 0, Math.PI * 2);
         ctx.fill();
         
-        // Track fire trails (store in gameContext if available)
-        if (gameContext && player) {
+        // Track fire trails (store on player to ensure persistence)
+        if (player) {
             // Initialize fire trails array if not exists
-            if (!gameContext.fireTrails) {
-                gameContext.fireTrails = [];
+            if (!player.fireTrails) {
+                player.fireTrails = [];
             }
             
             // Add new fire trail at player's current position every few frames
             if (frame % 3 === 0) {
-                gameContext.fireTrails.push({
+                player.fireTrails.push({
                     x: player.x,
                     y: player.y,
                     startTime: Date.now(),
-                    width: width * 0.4
+                    width: width * 0.25 // small trail
                 });
             }
             
             // Draw and update fire trails
             const now = Date.now();
-            gameContext.fireTrails = gameContext.fireTrails.filter(trail => {
+            player.fireTrails = player.fireTrails.filter(trail => {
                 const age = (now - trail.startTime) / 1000; // Age in seconds
-                if (age > 2) return false; // Remove trails older than 2 seconds
+                if (age > 1) return false; // Remove trails older than 1 second
                 
                 // Draw trail with fading intensity
-                const intensity = 1 - (age / 2);
-                ctx.globalAlpha = intensity * 0.6;
+                const intensity = 1 - age;
+                ctx.globalAlpha = intensity * 0.45;
+                
+                // Calculate position relative to transformed player space
+                const facing = player.facing || 1;
+                const localX = (trail.y - player.y) * facing;
+                const localY = -(trail.x - player.x);
                 
                 const trailGradient = ctx.createRadialGradient(
-                    trail.x - player.x, trail.y - player.y, 0,
-                    trail.x - player.x, trail.y - player.y, trail.width
+                    localX, localY, 0,
+                    localX, localY, trail.width
                 );
-                trailGradient.addColorStop(0, 'rgba(255, 220, 0, 0.8)'); // Yellow center
-                trailGradient.addColorStop(0.5, 'rgba(255, 100, 0, 0.5)'); // Orange
+                trailGradient.addColorStop(0, 'rgba(255, 220, 0, 0.7)'); // Yellow center
+                trailGradient.addColorStop(0.5, 'rgba(255, 100, 0, 0.4)'); // Orange
                 trailGradient.addColorStop(1, 'rgba(255, 0, 0, 0)'); // Red fading
                 
                 ctx.fillStyle = trailGradient;
                 ctx.shadowColor = '#FF4400';
-                ctx.shadowBlur = 15;
+                ctx.shadowBlur = 10;
                 
                 ctx.beginPath();
-                ctx.arc(trail.x - player.x, trail.y - player.y, trail.width, 0, Math.PI * 2);
+                ctx.arc(localX, localY, trail.width, 0, Math.PI * 2);
                 ctx.fill();
                 
                 return true; // Keep trail
             });
             
             // Add burning effect to ball if close
-            if (gameContext.ball) {
+            if (gameContext && gameContext.ball) {
                 const dx = gameContext.ball.x - player.x;
                 const dy = gameContext.ball.y - player.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
                 if (distance < width * 1.5) {
-                    // Initialize ball fire effects
-                    if (!gameContext.ballFireEffects) {
-                        gameContext.ballFireEffects = [];
+                    // Initialize ball fire effects on persistent ball object
+                    if (!gameContext.ball.fireEffects) {
+                        gameContext.ball.fireEffects = [];
                     }
                     
                     // Add fire effect to ball
                     if (frame % 5 === 0) {
-                        gameContext.ballFireEffects.push({
+                        gameContext.ball.fireEffects.push({
                             startTime: Date.now()
                         });
                     }
                 }
                 
                 // Draw fire on ball (if it has fire effects)
-                if (gameContext.ballFireEffects && gameContext.ballFireEffects.length > 0) {
+                if (gameContext.ball.fireEffects && gameContext.ball.fireEffects.length > 0) {
                     const ballNow = Date.now();
-                    gameContext.ballFireEffects = gameContext.ballFireEffects.filter(effect => {
+                    gameContext.ball.fireEffects = gameContext.ball.fireEffects.filter(effect => {
                         const age = (ballNow - effect.startTime) / 1000;
                         if (age > 2) return false;
                         
                         const intensity = 1 - (age / 2);
                         ctx.globalAlpha = intensity * 0.7;
                         
+                        const facing = player.facing || 1;
+                        const ballLocalX = (gameContext.ball.y - player.y) * facing;
+                        const ballLocalY = -(gameContext.ball.x - player.x);
+                        
                         // Make ball look like it's on fire with flame layers
                         const ballFlames = 8;
                         for (let i = 0; i < ballFlames; i++) {
                             const angle = (i / ballFlames) * Math.PI * 2 + ballNow / 100;
                             const flicker = Math.sin(ballNow / 200 + i) * 0.2;
-                            const ballFlameX = dx + Math.cos(angle) * (12 * (1 + flicker));
-                            const ballFlameY = dy + Math.sin(angle) * (12 * (1 + flicker)) - 10;
+                            const ballFlameX = ballLocalX + Math.cos(angle) * (12 * (1 + flicker));
+                            const ballFlameY = ballLocalY + Math.sin(angle) * (12 * (1 + flicker)) - 10;
                             
                             const ballGradient = ctx.createRadialGradient(
                                 ballFlameX, ballFlameY, 0,
                                 ballFlameX, ballFlameY - 15, 20
                             );
-                            ballGradient.addColorStop(0, 'rgba(255, 255, 200, 0.9)');
-                            ballGradient.addColorStop(0.3, 'rgba(255, 200, 0, 0.7)');
-                            ballGradient.addColorStop(0.7, 'rgba(255, 100, 0, 0.4)');
+                            ballGradient.addColorStop(0, 'rgba(255, 255, 200, 0.7)');
+                            ballGradient.addColorStop(0.3, 'rgba(255, 200, 0, 0.5)');
+                            ballGradient.addColorStop(0.7, 'rgba(255, 100, 0, 0.3)');
                             ballGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
                             
                             ctx.fillStyle = ballGradient;
                             ctx.shadowColor = '#FF6600';
-                            ctx.shadowBlur = 20;
+                            ctx.shadowBlur = 15;
                             
                             ctx.beginPath();
                             ctx.ellipse(ballFlameX, ballFlameY, 8, 18 * (1 + flicker), angle, 0, Math.PI * 2);
@@ -1026,15 +1109,15 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                         }
                         
                         // Add bright core on ball
-                        const ballCoreGradient = ctx.createRadialGradient(dx, dy, 0, dx, dy, 15);
-                        ballCoreGradient.addColorStop(0, 'rgba(255, 255, 200, 0.5)');
-                        ballCoreGradient.addColorStop(0.5, 'rgba(255, 150, 0, 0.3)');
+                        const ballCoreGradient = ctx.createRadialGradient(ballLocalX, ballLocalY, 0, ballLocalX, ballLocalY, 15);
+                        ballCoreGradient.addColorStop(0, 'rgba(255, 255, 200, 0.4)');
+                        ballCoreGradient.addColorStop(0.5, 'rgba(255, 150, 0, 0.2)');
                         ballCoreGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
                         
                         ctx.fillStyle = ballCoreGradient;
-                        ctx.shadowBlur = 25;
+                        ctx.shadowBlur = 15;
                         ctx.beginPath();
-                        ctx.arc(dx, dy, 15, 0, Math.PI * 2);
+                        ctx.arc(ballLocalX, ballLocalY, 15, 0, Math.PI * 2);
                         ctx.fill();
                         
                         return true;

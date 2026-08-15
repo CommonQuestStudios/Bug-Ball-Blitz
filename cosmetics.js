@@ -763,15 +763,27 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                 const intensity = 1 - age;
                 ctx.globalAlpha = intensity * 0.45;
                 
-                // Calculate position relative to transformed player space
-                const facing = player.facing || 1;
-                const localX = (trail.y - player.y) * facing;
-                const localY = -(trail.x - player.x);
+                // Calculate position relative to transformed player space.
+                // Because main.js rotates the canvas by 90 degrees (Math.PI / 2) and scales by facing,
+                // we must apply the inverse transformation to map absolute world coordinates to local space:
+                // localX = (trail.y - player.y) * facing
+                // localY = -(trail.x - player.x)
+                let localX, localY;
+                if (useRelativeCoords) {
+                    const facing = player.facing || 1;
+                    localX = (trail.y - player.y) * facing;
+                    localY = -(trail.x - player.x);
+                } else {
+                    localX = trail.x - player.x;
+                    localY = trail.y - player.y;
+                }
+                const drawX = x + localX;
+                const drawY = y + localY;
                 
                 // Draw trailing lightning core
                 const trailGradient = ctx.createRadialGradient(
-                    localX, localY, 0,
-                    localX, localY, trail.width
+                    drawX, drawY, 0,
+                    drawX, drawY, trail.width
                 );
                 trailGradient.addColorStop(0, 'rgba(255, 255, 255, 0.7)'); // White center
                 trailGradient.addColorStop(0.4, 'rgba(0, 191, 255, 0.4)'); // Blue glow
@@ -782,7 +794,7 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                 ctx.shadowBlur = 10;
                 
                 ctx.beginPath();
-                ctx.arc(localX, localY, trail.width, 0, Math.PI * 2);
+                ctx.arc(drawX, drawY, trail.width, 0, Math.PI * 2);
                 ctx.fill();
                 
                 // Occasionally draw small random sparks inside the trail to make it look like a lightning trail!
@@ -792,8 +804,8 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                     ctx.shadowBlur = 5;
                     ctx.beginPath();
                     const sparkOffset = trail.width * 0.6;
-                    const sx = localX + (Math.random() - 0.5) * sparkOffset;
-                    const sy = localY + (Math.random() - 0.5) * sparkOffset;
+                    const sx = drawX + (Math.random() - 0.5) * sparkOffset;
+                    const sy = drawY + (Math.random() - 0.5) * sparkOffset;
                     ctx.moveTo(sx, sy);
                     ctx.lineTo(sx + (Math.random() - 0.5) * sparkOffset, sy + (Math.random() - 0.5) * sparkOffset);
                     ctx.stroke();
@@ -861,18 +873,27 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
             const shockDistance = width * 2.5; // Range for static shock
             
             // Check ball proximity
-            if (gameContext.ball) {
-                const dx = gameContext.ball.x - player.x;
-                const dy = gameContext.ball.y - player.y;
+            if (gameContext && gameContext.ball) {
+                const ball = gameContext.ball;
+                const dx = ball.x - player.x;
+                const dy = ball.y - player.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
                 if (distance < shockDistance && distance > width) {
-                    const facing = player.facing || 1;
-                    const ballLocalX = (gameContext.ball.y - player.y) * facing;
-                    const ballLocalY = -(gameContext.ball.x - player.x);
+                    let ballLocalX, ballLocalY;
+                    if (useRelativeCoords) {
+                        const facing = player.facing || 1;
+                        ballLocalX = (ball.y - player.y) * facing;
+                        ballLocalY = -(ball.x - player.x);
+                    } else {
+                        ballLocalX = ball.x - player.x;
+                        ballLocalY = ball.y - player.y;
+                    }
+                    const ballDrawX = x + ballLocalX;
+                    const ballDrawY = y + ballLocalY;
                     
                     // Draw lightning arc to ball
-                    const angle = Math.atan2(ballLocalY, ballLocalX);
+                    const angle = Math.atan2(ballDrawY - y, ballDrawX - x);
                     const startX = x + Math.cos(angle) * width * 0.5;
                     const startY = y + Math.sin(angle) * height * 0.5;
                     
@@ -888,8 +909,8 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                     const segments = 5;
                     for (let j = 1; j <= segments; j++) {
                         const t = j / segments;
-                        const midX = startX + (ballLocalX - startX) * t;
-                        const midY = startY + (ballLocalY - startY) * t;
+                        const midX = startX + (ballDrawX - startX) * t;
+                        const midY = startY + (ballDrawY - startY) * t;
                         const offsetX = (Math.random() - 0.5) * width * 0.2;
                         const offsetY = (Math.random() - 0.5) * height * 0.2;
                         ctx.lineTo(midX + offsetX, midY + offsetY);
@@ -899,7 +920,7 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
             }
             
             // Check other players proximity
-            if (gameContext.players && Array.isArray(gameContext.players)) {
+            if (gameContext && gameContext.players && Array.isArray(gameContext.players)) {
                 for (const otherPlayer of gameContext.players) {
                     if (otherPlayer === player) continue; // Skip self
                     
@@ -908,12 +929,20 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     
                     if (distance < shockDistance && distance > width) {
-                        const facing = player.facing || 1;
-                        const targetLocalX = (otherPlayer.y - player.y) * facing;
-                        const targetLocalY = -(otherPlayer.x - player.x);
+                        let targetLocalX, targetLocalY;
+                        if (useRelativeCoords) {
+                            const facing = player.facing || 1;
+                            targetLocalX = (otherPlayer.y - player.y) * facing;
+                            targetLocalY = -(otherPlayer.x - player.x);
+                        } else {
+                            targetLocalX = otherPlayer.x - player.x;
+                            targetLocalY = otherPlayer.y - player.y;
+                        }
+                        const targetDrawX = x + targetLocalX;
+                        const targetDrawY = y + targetLocalY;
                         
                         // Draw lightning arc to other player
-                        const angle = Math.atan2(targetLocalY, targetLocalX);
+                        const angle = Math.atan2(targetDrawY - y, targetDrawX - x);
                         const startX = x + Math.cos(angle) * width * 0.5;
                         const startY = y + Math.sin(angle) * height * 0.5;
                         
@@ -929,8 +958,8 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                         const segments = 5;
                         for (let j = 1; j <= segments; j++) {
                             const t = j / segments;
-                            const midX = startX + (targetLocalX - startX) * t;
-                            const midY = startY + (targetLocalY - startY) * t;
+                            const midX = startX + (targetDrawX - startX) * t;
+                            const midY = startY + (targetDrawY - startY) * t;
                             const offsetX = (Math.random() - 0.5) * width * 0.2;
                             const offsetY = (Math.random() - 0.5) * height * 0.2;
                             ctx.lineTo(midX + offsetX, midY + offsetY);
@@ -1024,14 +1053,26 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                 const intensity = 1 - age;
                 ctx.globalAlpha = intensity * 0.45;
                 
-                // Calculate position relative to transformed player space
-                const facing = player.facing || 1;
-                const localX = (trail.y - player.y) * facing;
-                const localY = -(trail.x - player.x);
+                // Calculate position relative to transformed player space.
+                // Because main.js rotates the canvas by 90 degrees (Math.PI / 2) and scales by facing,
+                // we must apply the inverse transformation to map absolute world coordinates to local space:
+                // localX = (trail.y - player.y) * facing
+                // localY = -(trail.x - player.x)
+                let localX, localY;
+                if (useRelativeCoords) {
+                    const facing = player.facing || 1;
+                    localX = (trail.y - player.y) * facing;
+                    localY = -(trail.x - player.x);
+                } else {
+                    localX = trail.x - player.x;
+                    localY = trail.y - player.y;
+                }
+                const drawX = x + localX;
+                const drawY = y + localY;
                 
                 const trailGradient = ctx.createRadialGradient(
-                    localX, localY, 0,
-                    localX, localY, trail.width
+                    drawX, drawY, 0,
+                    drawX, drawY, trail.width
                 );
                 trailGradient.addColorStop(0, 'rgba(255, 220, 0, 0.7)'); // Yellow center
                 trailGradient.addColorStop(0.5, 'rgba(255, 100, 0, 0.4)'); // Orange
@@ -1042,7 +1083,7 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                 ctx.shadowBlur = 10;
                 
                 ctx.beginPath();
-                ctx.arc(localX, localY, trail.width, 0, Math.PI * 2);
+                ctx.arc(drawX, drawY, trail.width, 0, Math.PI * 2);
                 ctx.fill();
                 
                 return true; // Keep trail
@@ -1078,17 +1119,25 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                         const intensity = 1 - (age / 2);
                         ctx.globalAlpha = intensity * 0.7;
                         
-                        const facing = player.facing || 1;
-                        const ballLocalX = (gameContext.ball.y - player.y) * facing;
-                        const ballLocalY = -(gameContext.ball.x - player.x);
+                        let ballLocalX, ballLocalY;
+                        if (useRelativeCoords) {
+                            const facing = player.facing || 1;
+                            ballLocalX = (gameContext.ball.y - player.y) * facing;
+                            ballLocalY = -(gameContext.ball.x - player.x);
+                        } else {
+                            ballLocalX = gameContext.ball.x - player.x;
+                            ballLocalY = gameContext.ball.y - player.y;
+                        }
+                        const ballDrawX = x + ballLocalX;
+                        const ballDrawY = y + ballLocalY;
                         
                         // Make ball look like it's on fire with flame layers
                         const ballFlames = 8;
                         for (let i = 0; i < ballFlames; i++) {
                             const angle = (i / ballFlames) * Math.PI * 2 + ballNow / 100;
                             const flicker = Math.sin(ballNow / 200 + i) * 0.2;
-                            const ballFlameX = ballLocalX + Math.cos(angle) * (12 * (1 + flicker));
-                            const ballFlameY = ballLocalY + Math.sin(angle) * (12 * (1 + flicker)) - 10;
+                            const ballFlameX = ballDrawX + Math.cos(angle) * (12 * (1 + flicker));
+                            const ballFlameY = ballDrawY + Math.sin(angle) * (12 * (1 + flicker)) - 10;
                             
                             const ballGradient = ctx.createRadialGradient(
                                 ballFlameX, ballFlameY, 0,
@@ -1109,7 +1158,7 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                         }
                         
                         // Add bright core on ball
-                        const ballCoreGradient = ctx.createRadialGradient(ballLocalX, ballLocalY, 0, ballLocalX, ballLocalY, 15);
+                        const ballCoreGradient = ctx.createRadialGradient(ballDrawX, ballDrawY, 0, ballDrawX, ballDrawY, 15);
                         ballCoreGradient.addColorStop(0, 'rgba(255, 255, 200, 0.4)');
                         ballCoreGradient.addColorStop(0.5, 'rgba(255, 150, 0, 0.2)');
                         ballCoreGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
@@ -1117,7 +1166,7 @@ function drawSpecial(ctx, cosmetic, x, y, width, height, frame, player, gameCont
                         ctx.fillStyle = ballCoreGradient;
                         ctx.shadowBlur = 15;
                         ctx.beginPath();
-                        ctx.arc(ballLocalX, ballLocalY, 15, 0, Math.PI * 2);
+                        ctx.arc(ballDrawX, ballDrawY, 15, 0, Math.PI * 2);
                         ctx.fill();
                         
                         return true;

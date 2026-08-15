@@ -80,7 +80,7 @@ export const BUGS = {
         name: 'Grasshopper',
         stats: {
             speed: 0.82,
-            jump: 1.15,
+            jump: 0.95,
             power: 0.7,
             size: 0.9
         },

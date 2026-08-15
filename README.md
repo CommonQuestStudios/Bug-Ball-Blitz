@@ -3,7 +3,7 @@
 **Physics-based soccer with insect athletes — play instantly on any device.**
 
 <p align="center">
-  <a href="https://aaronc1992.github.io/Bug-Ball-Blitz/">
+  <a href="https://commonqueststudios.github.io/Bug-Ball-Blitz/">
     <img src="https://img.shields.io/badge/▶%20PLAY%20NOW-00d4ff?style=for-the-badge&logoColor=white" alt="Play Now" height="50">
   </a>
 </p>
@@ -97,7 +97,7 @@ Built by **Aaron C.** — [GitHub Profile](https://github.com/AaronC1992)
 ---
 
 <p align="center">
-  <a href="https://aaronc1992.github.io/Bug-Ball-Blitz/">
+  <a href="https://commonqueststudios.github.io/Bug-Ball-Blitz/">
     <img src="https://img.shields.io/badge/▶%20PLAY%20NOW-00d4ff?style=for-the-badge&logoColor=white" alt="Play Now" height="40">
   </a>
 </p>

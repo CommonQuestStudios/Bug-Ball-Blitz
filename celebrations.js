@@ -789,11 +789,7 @@ function initCelebration(type, side, width, height) {
 }
 
 // Update state on each frames sequence step
-function updateCelebration(type, side, width, height) {
-    const goalX = side === 'left' ? 50 : width - 50;
-    const goalY = height * 0.7 - 60;
-    const frame = celebrationState.frame + 1;
-
+function updateCelebration(type, side, width, height, frame) {
     // Update particles first
     for (let i = celebrationState.particles.length - 1; i >= 0; i--) {
         const p = celebrationState.particles[i];
@@ -1358,9 +1354,6 @@ function updateCelebration(type, side, width, height) {
 
 // Draw the current state of celebration
 function drawState(ctx, type, side, width, height, frame) {
-    const goalX = side === 'left' ? 50 : width - 50;
-    const goalY = height * 0.7 - 60;
-
     // First draw standard particle systems
     for (const p of celebrationState.particles) {
         p.draw(ctx);
@@ -1368,7 +1361,6 @@ function drawState(ctx, type, side, width, height, frame) {
 
     switch (type) {
         case 'classic': {
-            const p = frame / 60;
             ctx.save();
             ctx.shadowColor = 'rgba(255, 215, 0, 0.5)';
             ctx.shadowBlur = 20;
@@ -1521,7 +1513,48 @@ function drawState(ctx, type, side, width, height, frame) {
             break;
         }
         case 'lightning': {
-            // Drawn in update / flash logic
+            // Draw screen flash
+            if (celebrationState.customData.flashOpacity > 0.01) {
+                ctx.save();
+                ctx.fillStyle = `rgba(230, 240, 255, ${celebrationState.customData.flashOpacity})`;
+                ctx.fillRect(0, 0, width, height);
+                ctx.restore();
+            }
+            
+            // Draw all active bolts
+            for (const bolt of celebrationState.customData.bolts) {
+                if (bolt.opacity <= 0.01) continue;
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(bolt.segments[0].x, bolt.segments[0].y);
+                for (let i = 1; i < bolt.segments.length; i++) {
+                    ctx.lineTo(bolt.segments[i].x, bolt.segments[i].y);
+                }
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = bolt.isBranch ? 2 : 5;
+                ctx.shadowColor = '#00FFFF';
+                ctx.shadowBlur = 15;
+                ctx.globalAlpha = bolt.opacity;
+                ctx.stroke();
+                
+                ctx.strokeStyle = '#E0FFFF';
+                ctx.lineWidth = bolt.isBranch ? 1 : 2;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Draw glowing ground strike locations
+            for (const loc of celebrationState.customData.strikeLocations) {
+                ctx.save();
+                const glowGrad = ctx.createRadialGradient(loc.x, loc.y, 0, loc.x, loc.y, 30);
+                glowGrad.addColorStop(0, 'rgba(0, 255, 255, 0.8)');
+                glowGrad.addColorStop(1, 'rgba(0, 255, 255, 0)');
+                ctx.fillStyle = glowGrad;
+                ctx.beginPath();
+                ctx.arc(loc.x, loc.y, 30, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
             break;
         }
         case 'rainbow': {
@@ -2127,6 +2160,7 @@ function drawState(ctx, type, side, width, height, frame) {
             ctx.beginPath();
             ctx.ellipse(vx, vy - 60, 20, 6, 0, 0, Math.PI * 2);
             ctx.fill();
+            ctx.restore();
             break;
         }
         case 'phoenix': {
@@ -2269,7 +2303,7 @@ export function drawCelebration(ctx, celebrationType, side, width, height, anima
     } else if (animationFrame > celebrationState.frame) {
         const steps = animationFrame - celebrationState.frame;
         for (let s = 0; s < steps; s++) {
-            updateCelebration(celebrationType, side, width, height);
+            updateCelebration(celebrationType, side, width, height, celebrationState.frame + 1 + s);
         }
         celebrationState.frame = animationFrame;
     }

@@ -462,7 +462,7 @@ export class Physics {
             ball.vx *= 0.88;
         }
         if (windDirection) {
-            ball.vx += windDirection * 0.15;
+            ball.vx += windDirection * 0.06;
         }
     }
     

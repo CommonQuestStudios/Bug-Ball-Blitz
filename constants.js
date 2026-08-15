@@ -69,5 +69,5 @@ export const WEATHER = {
     NONE_CHANCE: 0.7,
     RAIN_FRICTION: 0.92,
     SNOW_FRICTION: 0.88,
-    WIND_FORCE: 0.15
+    WIND_FORCE: 0.06
 };
